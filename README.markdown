@@ -14,7 +14,6 @@ After cloning this project:
 
         > run
 
-+ Browse to http://localhost:8001/tree or http://localhost:8001/graph for visualisation
 + Browse to http://localhost:8080/ for http://localhost:8080/Account for REST endpoints
 
 ### Useful `sbt` commands
