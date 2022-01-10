@@ -1,0 +1,11 @@
+package com.ing.corebank.rebel.simple_transaction.opensystem.throttle
+
+import com.ing.corebank.rebel.simple_transaction.SimulationBaseOpen
+
+
+class DummySimulation extends com.ing.corebank.rebel.simple_transaction.simple.DummySimulation with SimulationBaseOpen
+class SimpleSimulation extends com.ing.corebank.rebel.simple_transaction.simple.SimpleSimulation with SimulationBaseOpen
+class SimpleShardingSimulation extends com.ing.corebank.rebel.simple_transaction.simple.SimpleShardingSimulation with SimulationBaseOpen
+class SimpleWithPersistenceSimulation extends com.ing.corebank.rebel.simple_transaction.simple.SimpleWithPersistenceSimulation with SimulationBaseOpen
+class OpenAccountSimulation extends com.ing.corebank.rebel.simple_transaction.simple.OpenAccountSimulation with SimulationBaseOpen
+class AllToAllSimulation extends com.ing.corebank.rebel.simple_transaction.AllToAllSimulation with SimulationBaseOpen

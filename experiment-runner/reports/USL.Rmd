@@ -1,0 +1,320 @@
+---
+output:
+  html_document:
+    fig_height: 8
+    fig_width: 11
+  pdf_document: default
+---
+# Universal Scalability Law tests
+```{r echo=FALSE, message=FALSE}
+set.seed(1234)
+library(ggplot2)
+library(lattice)
+library(zoo)
+library(data.table)
+library(anytime)
+library(usl)
+library(jsonlite)
+
+library(plotly)
+library(lazyeval)
+
+options(echo=TRUE)
+library(optparse)
+
+defaultFilePath <- "/Users/tim/workspace/account-modelling/ing-codegen-akka/results/2017-08-22T16:53:51.371+02:00-batch/com.ing.corebank.rebel.simple_transaction.simple.OpenAccountSimulation"
+# defaultFilePath <- "/Users/tim/workspace/account-modelling/ing-codegen-akka/results/2017-08-11T10:51:08.459+02:00-batch"
+# defaultFilePath <- "/Users/tim/workspace/account-modelling/ing-codegen-akka/results/2017-08-11T11:29:47.903+02:00-batch"
+
+option_list <- list(
+  # make_option(c("-dir", "--from-directory"), action="store_true", default=FALSE,
+    # help="Count the line numbers [default]"),
+  make_option(c("-f", "--file"), default=defaultFilePath,
+    help="File to process")
+)
+
+parser <- OptionParser(usage="%prog [options] file", option_list=option_list)
+
+args <- parse_args(parser, positional_arguments = 0)
+opt <- args$options
+resultDir <- args$options$file
+resultDir
+```
+
+```{r echo=FALSE}
+
+experimentsDirNames <- list.dirs(resultDir, recursive=FALSE)
+
+experiments <- lapply(experimentsDirNames, function(exp) { 
+  testDescriptionFile <- sprintf("%s/test.json", exp)
+  metricsDir <- sprintf("%s/metrics/", exp) 
+  
+  gatlingFile <- sprintf("%s/gatling.csv", metricsDir)
+  gatling <- read.csv(file=gatlingFile,head=TRUE,sep=",")
+  gatling$time <- anytime(gatling$time/ 1000000000)# as.POSIXct(gatling$time / 1000000000, origin="1970-01-01")
+  gatling <- data.table(gatling)
+  
+  gatlingUsersFile <- sprintf("%s/gatling.users.csv", metricsDir)
+  gatlingUsers <- read.csv(file=gatlingUsersFile,head=TRUE,sep=",")
+  gatlingUsers$time <- as.POSIXct(gatlingUsers$time / 1000000000, origin="1970-01-01")
+  gatlingUsers <- data.table(gatlingUsers)
+  
+  # print(metricsDir)
+  kamonTimers <- read.csv(file=sprintf("%s/kamon-timers.csv", metricsDir),head=TRUE,sep=",", colClasses = c("time" = "character"))
+  # print(kamonTimers)
+  kamonTimers$time <- anytime(as.numeric(kamonTimers$time) / 1000000000) #  as.POSIXct(, origin="1970-01-01")
+  # print(kamonTimers)
+  
+  kamonTimers <- data.table(kamonTimers)
+  
+  # Find start of real performance test
+  maxDuration <- 10
+  warmupTimeInSeconds <- 15 * 2 + (maxDuration*60) / 12
+  smallestTime <- min(gatling$time)
+  performanceStartTime <- smallestTime + warmupTimeInSeconds
+  
+  
+  # filter on start time
+  gatling <- gatling[time >= performanceStartTime,]
+  gatlingUsers <- gatlingUsers[time >= performanceStartTime,]
+  kamonTimers <- kamonTimers[time >= performanceStartTime,]
+  
+  list(
+    metricsDir = metricsDir,
+    testDescription = fromJSON(readLines(testDescriptionFile, warn=FALSE)),
+    gatling = gatling,
+    gatlingUsers = gatlingUsers,
+    kamonTimers = kamonTimers
+  )
+})
+# experiments
+
+```
+
+#USL library
+
+```{r error=TRUE}
+
+results <- sapply(experiments, function(exp) { 
+  gatling <- exp$gatling
+  gatling
+  ok <- gatling[request!="allRequests" & status=="ok"]
+  okTotal <- ok[,list(count = sum(count)), by = time]
+  
+  result <- list(
+    nodeCount = exp$testDescription$clusterSize,
+    throughput = median(okTotal$count)
+  )
+  unlist(result)
+  # plot_ly(result, x=~nrNodes, y=~totalReqs)
+})
+
+# resultsds
+# t(results)
+
+benchmarkDF <- as.data.frame(t(results))
+benchmarkOrdered <- benchmarkDF[order(benchmarkDF$nodeCount), , ]
+# benchmark <- benchmarkOrdered[1:6, ]
+# benchmarkRest <- benchmarkOrdered[7:100, ]
+benchmark <- benchmarkOrdered
+# plot(benchmark)
+benchmark
+
+plot_ly(benchmark, x=~nodeCount, y=~throughput, type = 'scatter', mode = 'markers')
+
+## Create USL model for "throughput" by "nodeCount"
+usl.model <- usl(throughput ~ nodeCount, benchmark)
+## Show summary of model parameters
+summary(usl.model)
+## Show complete list of efficiency parameters
+efficiency(usl.model)
+## Extract coefficients for model
+coef(usl.model)
+## Calculate point of peak scalability]
+print("peak")
+peak.scalability(usl.model)
+## Plot original data and scalability function
+# plot(benchmark)
+# plot(usl.model, add=TRUE)
+
+# sigma <- coef(usl.model)['sigma']
+# kappa <- coef(usl.model)['kappa']
+# lambda <- coef(usl.model)['lambda']
+# # lambda <- kappa / sigma
+# lambda
+
+
+
+s <- scalability(usl.model)
+eff <- efficiency(usl.model)
+```
+
+```{r}
+plot_ly(benchmark, x=benchmark$nodeCount, y=~throughput, type = 'scatter', mode = 'markers') %>%
+  add_lines(x = 0:50, y = s(0:50)) # %>%
+  # add_lines(x = 0:7, y = lambda * (0:7)) # %>%
+  # add_trace(benchmarkRest, x=benchmarkRest$nodeCount, y=benchmarkRest$throughput)
+
+```
+
+
+```{r error=TRUE}
+
+results <- sapply(experiments, function(exp) { 
+  gatling <- exp$gatling
+  gatling
+  ok <- gatling[request!="allRequests" & status=="ok"]
+  okTotal <- ok[,list(count = sum(count)), by = time]
+  
+  result <- list(
+    nodeCount = exp$testDescription$clusterSize,
+    throughput = sum(okTotal$count)
+  )
+  unlist(result)
+  # plot_ly(result, x=~nrNodes, y=~totalReqs)
+})
+
+# results
+# t(results)
+
+benchmarkDF <- as.data.frame(t(results))
+benchmarkOrdered <- benchmarkDF[order(benchmarkDF$nodeCount), , ]
+# benchmark <- benchmarkOrdered[1:6, ]
+# benchmarkRest <- benchmarkOrdered[7:100, ]
+benchmark <- benchmarkOrdered
+# plot(benchmark)
+benchmark
+
+# madeup
+# nrNodes   <- c(1:12) #,12    ,13    ,14    ,15    ,16    ,17)
+# totalReqs <- c(237.83, 351.83, 443.896, 497.615, 527.793, 538.897, 552.326, 579.378, 582.015, 574.252, 601.993, 589.6) #, 49684, 52367, 49884, 55000, 60000, 50000)
+# benchmark <- 
+#   data.frame(nodeCount=nrNodes, throughput=totalReqs)
+# benchmark
+# 
+# 
+## Create USL model for "throughput" by "nodeCount"
+usl.model <- usl(throughput ~ nodeCount, benchmark)
+## Show summary of model parameters
+summary(usl.model)
+## Show complete list of efficiency parameters
+efficiency(usl.model)
+## Extract coefficients for model
+coef(usl.model)
+## Calculate point of peak scalability]
+print("peak")
+peak.scalability(usl.model)
+## Plot original data and scalability function
+# plot(benchmark)
+# plot(usl.model, add=TRUE)
+
+s <- scalability(usl.model)
+
+plot_ly(benchmark, x=benchmark$nodeCount, y=~throughput, type = 'scatter', mode = 'markers') %>%
+  add_lines(x = 1:50, y = s(1:50)) # %>%
+  # add_trace(benchmarkRest, x=benchmarkRest$nodeCount, y=benchmarkRest$throughput)
+
+```
+
+# Example values
+
+## USL direct manual data
+```{r}
+
+nrNodes   <- c(1,3,6,10,12)
+# totalReqs <- c(21990, 39984, 31276, 53367, 49684)
+totalReqs <- c(162.889, 296.178, 231.674, 395.311, 368.03)
+# nrNodes   <- c(1    ,3     ,6     ,10    ,12    ,13    ,14    ,15    ,16    ,17)
+# totalReqs <- c(21990, 39984, 31276, 53367, 49684, 52367, 49884, 55000, 60000, 50000)
+benchmark <-
+  data.frame(size=nrNodes, tput=totalReqs)
+benchmark
+
+usl <- nls(tput ~ lambda*size/(1 + sigma * (size-1) + kappa * size * (size-1)), benchmark, start=c(sigma=0.1, kappa=0.01, lambda=1000))
+summary(usl)
+sigma <- coef(usl)['sigma']
+kappa <- coef(usl)['kappa']
+lambda <- coef(usl)['lambda']
+
+sigma
+kappa
+lambda
+
+linear=function(x){(lambda * x) / 1}
+u=function(x){y=x*lambda/(1+sigma*(x-1)+kappa*x*(x-1))}
+
+
+speedup=function(N){ N / (1 + sigma*(N-1)) }
+
+amdahl=function(N){ (N * lambda) / (1 + sigma*(N-1)) }
+
+gustafson = function(N) { lambda * (N + (1 - N) * sigma) }
+
+
+plot(u, 0, max(benchmark$size)*2, xlab="Size", ylab="Throughput", lty="dashed")
+# points(benchmark$size, benchmark$tput)
+plot(linear, 0, max(benchmark$size)*2, add=TRUE)
+# plot(speedup, 0, max(benchmark$size)*2, add=TRUE)
+plot(amdahl, 0, max(benchmark$size)*2, add=TRUE)
+plot(gustafson, 0, max(benchmark$size)*2, add=TRUE)
+
+```
+
+#USL library manual data
+
+```{r}
+# require(usl)
+
+data(raytracer)
+raytracer
+
+## Create USL model for "throughput" by "processors"
+usl.model <- usl(throughput ~ processors, raytracer)
+
+## Show summary of model parameters
+summary(usl.model)
+
+## Show complete list of efficiency parameters
+efficiency(usl.model)
+
+## Extract coefficients for model
+coef(usl.model)
+
+## Calculate point of peak scalability
+peak.scalability(usl.model)
+
+## Plot original data and scalability function
+plot(raytracer)
+plot(usl.model, add=TRUE)
+
+```
+
+```{r}
+
+# madeup
+nrNodes   <- c(1:12) #,12    ,13    ,14    ,15    ,16    ,17)
+totalReqs <- c(237.83, 351.83, 443.896, 497.615, 527.793, 538.897, 552.326, 579.378, 582.015, 574.252, 601.993, 589.6) #, 49684, 52367, 49884, 55000, 60000, 50000)
+benchmark <-
+  data.frame(nodeCount=nrNodes, throughput=totalReqs)
+benchmark
+
+
+## Create USL model for "throughput" by "nodeCount"
+usl.model <- usl(throughput ~ nodeCount, benchmark)
+## Show summary of model parameters
+summary(usl.model)
+## Show complete list of efficiency parameters
+efficiency(usl.model)
+## Extract coefficients for model
+coef(usl.model)
+## Calculate point of peak scalability
+peak.scalability(usl.model)
+## Plot original data and scalability function
+plot(benchmark)
+plot(usl.model, add=TRUE)
+
+s <- scalability(usl.model)
+plot_ly(benchmark, x=benchmark$nodeCount, y=~throughput, type = 'scatter', mode = 'markers') %>%
+  add_lines(x = 1:50, y = s(1:50))
+
+```

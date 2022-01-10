@@ -1,0 +1,73 @@
+# For details see:
+# * http://wiki.apache.org/cassandra/Metrics
+# * https://github.com/addthis/metrics-reporter-config
+
+# This is an example file for configuring which metrics should go
+# where.  The sample sends everything to a flat file for humans to
+# poke at.  metrics-ganglia or metrics-graphite are more likely to
+# operationally useful.
+
+# Some metrics are global for a node (KeyCache capacity) while others
+# are broken down by column family or even IP.  The sample list
+# includes all of the global metrics via a while list.  To include
+# metrics for the system column family for example add
+# "^org.apache.cassandra.metrics.ColumnFamily.system.+".
+
+
+# Start Cassandra with
+# -Dcassandra.metricsReporterConfigFile=metrics-reporter-config.yaml
+# for this file to be used.  If you are using metrics-ganglia,
+# metrics-graphite, or a custom reporter you will also have to add those
+# jars to the lib directory.  Nothing in this file can affect
+# jmx metrics.
+
+#graphite:
+#-
+#  period: 5
+#  timeunit: 'SECONDS'
+#  prefix: 'cassandra.${host.name}'
+#  hosts:
+#  - host: 'metrics'
+#    port: 2003
+#  predicate:
+#    color: "white"
+#    useQualifiedName: true
+#    patterns:
+#    - "java.lang.OperatingSystem.SystemCpuLoad"
+#    - ".*"
+#
+#influxdb:
+#  -
+#    period: 5
+#    timeunit: 'SECONDS'
+#    protocol: 'http'
+#    auth: 'cassandra:cassandra'
+#    dbName: 'telegraf'
+#    connectionTimeout: 3000
+#    readTimeout: 3000
+#    tags:
+#     host: '${host.name}'
+#     env: 'dev'
+#    prefix: ''
+#    hosts:
+#      - host: 'metrics'
+#        port: 8086
+
+
+console:
+  -
+    outfile: '/tmp/metrics.out'
+    period: 10
+    timeunit: 'SECONDS'
+    predicate:
+      color: "white"
+      useQualifiedName: true
+      patterns:
+        - "^org.apache.cassandra.metrics.Cache.+"
+        - "^org.apache.cassandra.metrics.ClientRequest.+" # includes ClientRequestMetrics
+        - "^org.apache.cassandra.metrics.CommitLog.+"
+        - "^org.apache.cassandra.metrics.Compaction.+"
+        - "^org.apache.cassandra.metrics.DroppedMessage.+"
+        - "^org.apache.cassandra.metrics.ReadRepair.+"
+        - "^org.apache.cassandra.metrics.Storage.+"
+        - "^org.apache.cassandra.metrics.ThreadPools.+"

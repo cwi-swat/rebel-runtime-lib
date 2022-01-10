@@ -1,0 +1,14 @@
+/.bloop/
+/.idea/
+/project/boot/
+/project/plugins/project
+target/
+lib_managed/
+src_managed/
+test-output/
+*.iml
+.classpath_nb
+results/
+.Rproj.user
+
+.DS_Store

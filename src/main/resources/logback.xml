@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.out</target>
+        <encoder>
+            <!--<pattern>%d{HH:mm:ss.SSS} [%thread] %highlight(%-5level) %cyan(%logger{36}) - %msg%n</pattern>-->
+            <pattern>[ %highlight(%-5level)] %red([%date{dd MMM yyyy;HH:mm:ss.SSS}]) %yellow([%logger{0}]) %cyan(%X{akkaSource}) - %boldBlue(%msg%n)</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="CONSOLE"/>
+        <neverBlock>true</neverBlock>
+    </appender>
+
+    <logger name="org.apache.cassandra" level="ERROR" />
+    <logger name="com.datastax.driver.core" level="WARN" />
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+
+    </root>
+
+</configuration>

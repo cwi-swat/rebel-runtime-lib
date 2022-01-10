@@ -1,0 +1,1149 @@
+---
+output:
+  html_document:
+    fig_height: 8
+    fig_width: 11
+  pdf_document: default
+---
+# Compare different experiment variants
+
+```{r echo=FALSE, message=FALSE}
+
+source("ReportLib.R")
+
+defaultFilePath <- "/Users/tim/workspace/account-modelling/ing-codegen-akka/results/2020-04-08T09:28:20.038+02:00-CommandDecidersClosedContention1000FindMaxAltnew"
+
+option_list <- list(
+  # make_option(c("-dir", "--from-directory"), action="store_true", default=FALSE,
+  
+    # help="Count the line numbers [default]"),
+  make_option(c("-f", "--file"), default=defaultFilePath,
+    help="File to process")
+)
+
+parser <- OptionParser(usage="%prog [options] file", option_list=option_list)
+
+args <- parse_args(parser, positional_arguments = 0)
+opt <- args$options
+resultDir <- args$options$file
+resultDir
+```
+
+```{r echo=FALSE, error=TRUE}
+
+# if(resultDir != defaultFilePath) {
+  # now we are run with proper command line arguments, so we really look what the input is
+  variantDirNames <- list.dirs(resultDir, recursive=FALSE)
+# }
+# print(batchDirNames)
+
+variantDirNames <- variantDirNames[!endsWith(variantDirNames,"CompareVariants_files")]
+variantDirNames <- variantDirNames[!endsWith(variantDirNames,"CompareVariantsRamp_files")]
+
+batchConf <- fromJSON(readLines(sprintf("%s/batch.conf", resultDir), warn=FALSE))
+nName <- names(batchConf$n)
+
+if (length(nName) != 1) stop(paste0("ERROR more values for n found: ", nName))
+
+variants <- lapply(variantDirNames, function(variantDir) {
+  # batchDir <- sprintf("%s/%s", resultDir, batch)
+  experimentsDirNames <- list.dirs(variantDir, recursive=FALSE)
+
+  print(variantDir)
+  print(experimentsDirNames)
+
+  variantJsonFileName <- sprintf("%s/variant.json", variantDir)
+  print(variantJsonFileName)
+  variantJson <- fromJSON(readLines(variantJsonFileName, warn=FALSE))
+  print(variantJson$description)
+
+  experiments <- lapply(experimentsDirNames, safeLoadExperiment)
+  experiments <- Filter(Negate(is.null), experiments)
+
+  list(
+    title = last(unlist(strsplit(variantDir, "/"))), # could be from json file as well
+    experiments = experiments,
+    variant = variantJson
+  )
+})
+
+variants <- Filter(Negate(is.null), variants)
+
+```
+
+## Scalability Plots
+
+```{r error=TRUE}
+
+variantBenchmarks <- lapply(variants, function(variant) {
+  # print(experiments)
+  
+  print(toJSON(variant$variant, pretty = T))
+  # print(nName)
+  
+  results <- sapply(variant$experiments, extractNodeCountVsThroughput, nName=nName, rampExperiment=T)
+  
+  # print(results)
+  # t(results)
+  
+  benchmarkDF <- as.data.frame(t(results))
+  if(!length(benchmarkDF) == 0) {
+    # print(benchmarkDF)
+    benchmarkOrdered <- benchmarkDF[order(benchmarkDF$n), , ]
+    # benchmark <- benchmarkOrdered[1:6, ]
+    # benchmarkRest <- benchmarkOrdered[7:100, ]
+    benchmark <- benchmarkOrdered
+    # speedup
+    # throughput(n) / througput(1)
+    tp1 <- benchmark[benchmark$n == 1, "throughput"]
+    if(length(tp1) == 0) {
+       first <- benchmark[1,] # because ordered
+       tp1 <- first$throughput / first$n
+    }
+    # print(tp1)
+    benchmark$speedup <- benchmark$throughput / tp1
+    benchmark$efficiency <- benchmark$throughput /benchmark$n / tp1
+    
+    # print(benchmark$speedup)
+    
+    # plot(benchmark)
+    list(
+      title = variant$title,
+      benchmark = benchmark,
+      tp1 = tp1
+    )
+  }
+})
+
+saveRDS(variantBenchmarks, paste0(resultDir, "/variantBenchmarks.rds"))
+
+
+p <- plot_ly(type = 'scatter', mode = 'markers+lines')  %>%
+    layout(xaxis= list(title=nName), yaxis = list(title = 'Throughput'), hovermode = 'compare'
+           # ,legend = list(xanchor="center",yanchor="top",x = 0, y = -0.3)
+           )
+
+speedup <- plot_ly(type = 'scatter', mode = 'markers+lines')  %>%
+    layout(xaxis= list(title=nName), yaxis = list(title = 'Speedup'), hovermode = 'compare'
+           # ,legend = list(xanchor="center",yanchor="top",x = 0, y = -0.3)
+           )
+
+efficiency <- plot_ly(type = 'scatter', mode = 'markers+lines')  %>%
+    layout(xaxis= list(title=nName), yaxis = list(title = 'Efficiency'), hovermode = 'compare'
+           # ,legend = list(xanchor="center",yanchor="top",x = 0, y = -0.3)
+           )
+
+db <- plot_ly(type = 'scatter', mode = 'markers+lines')  %>%
+    layout(xaxis= list(title=nName), yaxis = list(title = 'cpu usage'), hovermode = 'compare'
+           # , legend = list(xanchor="center",yanchor="top",x = 0, y = -0.3)
+           )
+
+for(bb in variantBenchmarks) {
+  # print(bb)
+  # print(bb$benchmark)
+  p <- add_trace(p, x=bb$benchmark$n, y=bb$benchmark$throughput, name=bb$title, 
+                 # color = -bb$benchmark$percentiles99, colors="RdYlGn",
+                 error_y = list(type = "data", array = bb$benchmark$throughput.max, arrayminus = bb$benchmark$throughput.min, symmetric = FALSE),
+                 text = paste('p99: ', bb$benchmark$percentiles99, '\n users: ', bb$benchmark$users))
+  if (any(bb$benchmark$failures > 0)) {
+     print(paste0("FAILURES IN ", bb$title))
+     p <- add_trace(p, x=bb$benchmark$n, y=bb$benchmark$failures, name=paste0(bb$title,'-failures'),
+                    error_y = list(type = "data", array = bb$benchmark$failures.max, arrayminus = bb$benchmark$failures.min, symmetric = FALSE)
+     )
+                    # error_y = ~list(value = bb$benchmark$failures.sd)) 
+  }
+  
+  speedup <- speedup %>%
+    add_trace(bb$benchmark, x=bb$benchmark$n, y=bb$benchmark$speedup, name=bb$title) #, 
+                 # color = -bb$benchmark$percentiles99, colors="RdYlGn", 
+                 # error_y = list(type = "data", array = bb$benchmark$throughput.max, arrayminus = bb$benchmark$throughput.min, symmetric = FALSE))
+  
+  efficiency <- efficiency %>%
+    add_trace(bb$benchmark, x=bb$benchmark$n, y=bb$benchmark$efficiency, name=bb$title)
+  
+  #cassandra
+  db <- db %>%
+    add_trace(x=bb$benchmark$n, y=bb$benchmark$dbCpu*100, name=paste0("dbcpu-", bb$title),
+      error_y = list(type = "data", array = bb$benchmark$dbCpu.max, arrayminus = bb$benchmark$dbCpu.min, symmetric = FALSE), marker=list(symbol="cross")) %>%
+    add_trace(x=bb$benchmark$n, y=bb$benchmark$cpu, name=paste0("cpu-", bb$title),
+      error_y = list(type = "data", array = bb$benchmark$cpu.max, arrayminus = bb$benchmark$cpu.min, symmetric = FALSE))
+}
+
+maxSpeedup <- max(batchConf$n$`cluster-sizes`)
+
+speedup <- speedup %>%
+    add_lines(x=0:maxSpeedup, 0:maxSpeedup, name="Linear speedup", line = list(dash="dash"))
+
+efficiency <- efficiency %>%
+    add_lines(x=0:maxSpeedup, 1, name="Linear efficiency", line = list(dash="dash"))
+
+p
+
+```
+
+### Relative Speedup
+
+\[X(n) / X(1)\]
+
+```{r error=TRUE, echo=FALSE}
+speedup
+```
+
+### Efficiency
+
+\[X(n) / n / X(1)\]
+
+```{r error=TRUE, echo=FALSE}
+efficiency
+```
+
+
+### Pirateplots per variant
+```{r error=TRUE}
+
+# system.time(
+variantBeans <- lapply(variants, function(variant) {
+  # print(experiments)
+  
+  # print(toJSON(variant$variant, pretty = T))
+  
+  results <- lapply(variant$experiments, function(exp) {
+    gatling <- gatlingTotals(exp, T)$allTotal
+
+    n <- getN(nName, exp$testDescription)
+    gatling$n <- rep(n,nrow(gatling)) 
+    
+    #CPU
+    # dbCpu <- exp$dbDuringExp$os.processCpuLoad
+    # nodeCpu <- 1 - (exp$kamonTimersDuringExp[metric=='cpu-idle']$mean / 100)
+    
+    # print(gatling)
+    gatling
+  })
+  
+  combined <- rbindlist(results)
+  combined[,variant:=variant$title]
+  # ^  user  system elapsed 
+  #    0.281   0.081   0.397 
+  # combined$variant <- rep(variant$title,nrow(combined))
+  # ^  user  system elapsed 
+  #    0.378   0.044   0.501 
+  combined
+})
+# )
+
+# print(variantBeans)
+
+for(variantBeanPlot in variantBeans) {
+  variantName = variantBeanPlot$variant[[1]]
+  
+  # myFun = function(x) { x * 5000 }
+  # 
+  # pirateplot(count ~ n , data=variantBeanPlot, point.o = .005, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, jitter.val=.2, point.cex=0.5)
+  # curve(myFun, n = variantBeanPlot$n)
+  # 
+  # print(variantBeanPlot, class = TRUE)
+  # 
+  # g2 <- ggplot(variantBeanPlot, aes(n, count)) +
+  #   # xlab("N") +
+  #   # ylab("X(N)") +
+  #   stat_function(fun=myFun, aes(colour="Linear")) +
+  #    # geom_ribbon(aes(ymin = func2, ymax = func1), fill = "blue", alpha = .5) +
+  #   # stat_function(fun=nearLinear, aes(colour="Near-linear")) +
+  #   # stat_function(fun=nonLinear, aes(colour="Non-linear")) +
+  #   # stat_function(fun=horizontal, aes(colour="Horizontal")) +
+  #   geom_pirate(aes(colour = n, fill = n),
+  #   points_params = list(alpha = .03), lines_params = list(size = 0.2, alpha = 0.1)) +
+  #   theme(legend.position="bottom") + labs(color='variant')
+  # # 
+  # print(g2)
+  
+  # Hack to deal with int
+  variantBeanPlot$n <- as.factor(variantBeanPlot$n)
+  print(ggplot(variantBeanPlot, aes(x = n, y = count)) + 
+    geom_pirate(aes(colour = n, fill = n),
+                points_params = list(alpha = .03), lines_params = list(size = 0.2, alpha = 0.1)) +
+    ggtitle(paste0(head(variantBeanPlot$variant), " total count")))
+  print(ggplot(variantBeanPlot, aes(x = n, y = ok)) + 
+    geom_pirate(aes(colour = n, fill = n),
+                points_params = list(alpha = .03), lines_params = list(size = 0.2, alpha = 0.1)) +
+    ggtitle(paste0(head(variantBeanPlot$variant), " total OK")))
+}
+
+all <- rbindlist(variantBeans)
+
+# pirateplot(count ~ variant , data=all, point.o = .005, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, jitter.val=.2, point.cex=0.5)
+
+# pirateplot(ok ~ variant , data=all, point.o = .005, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, jitter.val=.2, point.cex=0.5)
+
+all$n <- as.factor(all$n)
+all$variant <- as.factor(all$variant)
+
+saveRDS(all, paste0(resultDir, "/all.pirate.rds"))
+```
+
+### Pirateplots combined
+
+#### Total count
+```{r error=TRUE}
+ggplot(all, aes(x = variant, y = count)) + facet_wrap(~n) + 
+  geom_pirate(aes(colour = variant, fill = variant),
+              points_params = list(alpha = .03), lines_params = list(size = 0.2, alpha = 0.1), violins_params = list(scale = "width"))
+
+ggplot(all, aes(x = n, y = count)) + facet_wrap(~variant) + 
+  geom_pirate(aes(colour = n, fill = n),
+              points_params = list(alpha = .03), lines_params = list(size = 0.2, alpha = 0.1), violins_params = list(scale = "width", width=0.5))
+```
+
+#### Only OKs
+
+```{r error=TRUE}
+ggplot(all, aes(x = variant, y = ok)) + facet_wrap(~n) + 
+  geom_pirate(aes(colour = variant, fill = variant),
+              points_params = list(alpha = .03), lines_params = list(size = 0.2, alpha = 0.1), violins_params = list(scale = "width"))
+
+ggplot(all, aes(x = n, y = ok)) + facet_wrap(~variant) + 
+  geom_pirate(aes(colour = n, fill = n),
+              points_params = list(alpha = .03), lines_params = list(size = 0.2, alpha = 0.1), violins_params = list(scale = "width", width=0.5))
+```
+
+### Pirateplots per variant, in single plot
+```{r error=TRUE}
+ggplot(all, aes(x = n, y = count)) +
+  geom_pirate(aes(colour = variant, fill = variant), points_params = list(alpha = .1), lines_params = list(size = 0.2, alpha = 0.1), 
+              violins_params = list(scale = "width"),
+              show.legend = TRUE) + 
+  theme(legend.position="bottom") + labs(color='variant') + ggtitle("Total count vs n")
+
+ggplot(all, aes(x = n, y = ok)) +
+  geom_pirate(aes(colour = variant, fill = variant), points_params = list(alpha = .1), lines_params = list(size = 0.2, alpha = 0.1), 
+              violins_params = list(scale = "width"),
+              show.legend = TRUE) + 
+  theme(legend.position="bottom") + labs(color='variant') + ggtitle("OK count vs n")
+```
+
+## Cassandra + App cpu load
+
+```{r error=T}
+
+db %>% layout(yaxis = list(
+  # tickfont = list(color = "red"),
+  overlaying = "y",
+  side = "right",
+  range = c(0,100)
+))
+
+```
+
+## DB Cpu usage
+```{r error=T}
+
+for(variant in variants) {
+    dbCpus <- lapply(variant$experiments, function(exp) {
+      
+      dbCpuDF <- exp$dbDuringExp
+      n <- getN(nName, exp$testDescription)
+      dbCpuDF$heapMemoryUsage.used <- as.integer64(dbCpuDF$heapMemoryUsage.used) # hack to circumvent bug with int64 in rbindlist (https://github.com/Rdatatable/data.table/issues/1349)
+      dbCpuDF$n <- n
+    
+      dbCpuDF
+    })
+    
+    # print(dbCpus)
+    
+    dbCpusCombined <- rbindlist(dbCpus)
+      
+    tryCatch(pirateplot(os.processCpuLoad ~ n , data=dbCpusCombined, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, ylim = c(0,1), main = variant$title)
+    , error=function(e){cat("ERROR :",conditionMessage(e), "\n"); NULL})
+}
+
+```
+
+## App Cpu usage
+```{r error=T}
+
+for(variant in variants) {
+    
+    cpus <- lapply(variant$experiments, function(exp) {
+      nodeCpuDF <- getMetricsData(exp, "host.cpu")[mode=='combined']
+        
+        
+        # exp$kamonTimersDuringExp[metric=='cpu-idle']
+      # nodeCpuDF$nodeCpu <- 1 - (nodeCpuDF$mean / 100)
+      n <- getN(nName, exp$testDescription)
+      nodeCpuDF$n <- n
+    
+      nodeCpuDF
+    })
+    
+    # print(cpus)
+    
+    cpusCombined <- rbindlist(cpus)
+      
+    tryCatch(pirateplot(`p99.9` ~ n , data=cpusCombined, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, ylim = c(0,100), main = variant$title)
+    , error=function(e){cat("ERROR :",conditionMessage(e), "\n"); NULL})
+}
+
+```
+
+## 99p latency
+```{r error=TRUE}
+p <- plot_ly(type = 'scatter', mode = 'markers+lines')  %>%
+    layout(xaxis= list(title='Count'), yaxis = list(title = 'p99'), hovermode = 'compare', legend = list(xanchor="center",yanchor="top",x = 0, y = -0.3))
+
+for(bb in variantBenchmarks) {
+  # print(bb)
+  p <- add_trace(p, x=bb$benchmark$n, y=bb$benchmark$percentiles99, name=bb$title,
+                 # color = -bb$benchmark$percentiles99, colors="RdYlGn", 
+                 # error_y = list(type = "data", array = bb$benchmark$throughput.max, arrayminus = bb$benchmark$throughput.min, symmetric = FALSE),
+                 size = bb$benchmark$throughput,
+                 line = list(width = 2),
+                 text = paste('throughput: ', bb$benchmark$throughput, 
+                              '\n users: ', bb$benchmark$users,
+                              '\n p99.9: ', bb$benchmark$`percentiles99-9`,
+                              '\n p99: ', bb$benchmark$percentiles99,
+                              '\n p95: ', bb$benchmark$percentiles95,
+                              '\n p50: ', bb$benchmark$percentiles50
+                              )
+                 )
+  # if (any(bb$benchmark$failures > 0)) {
+     # print(paste0("FAILURES IN ", bb$title))
+     # p <- add_trace(p, x=bb$benchmark$nodeCount, y=bb$benchmark$failures, name=paste0(bb$title,'-failures'), error_y = ~list(value = bb$benchmark$failures.sd)) 
+  # }
+}
+p
+```
+
+```{r error=TRUE}
+p <- plot_ly(type = 'scatter', mode = 'markers+lines')  %>%
+    layout(xaxis= list(title='Throughput'), yaxis = list(title = 'p99'), hovermode = 'compare', legend = list(xanchor="center",yanchor="top",x = 0, y = -0.3))
+
+for(bb in variantBenchmarks) {
+  # print(bb)
+  p <- add_trace(p, x=bb$benchmark$throughput, y=bb$benchmark$percentiles99, name=bb$title,
+                 # color = -bb$benchmark$percentiles99, colors="RdYlGn", 
+                 # error_y = list(type = "data", array = bb$benchmark$throughput.max, arrayminus = bb$benchmark$throughput.min, symmetric = FALSE),
+                 size = bb$benchmark$throughput,
+                 line = list(width = 2),
+                 text = paste('n: ', bb$benchmark$n, 
+                              '\n users: ', bb$benchmark$users,
+                              '\n p99.9: ', bb$benchmark$`percentiles99-9`,
+                              '\n p99: ', bb$benchmark$percentiles99,
+                              '\n p95: ', bb$benchmark$percentiles95,
+                              '\n p50: ', bb$benchmark$percentiles50
+                              )
+                 )
+  # if (any(bb$benchmark$failures > 0)) {
+     # print(paste0("FAILURES IN ", bb$title))
+     # p <- add_trace(p, x=bb$benchmark$nodeCount, y=bb$benchmark$failures, name=paste0(bb$title,'-failures'), error_y = ~list(value = bb$benchmark$failures.sd)) 
+  # }
+}
+p
+```
+
+## Latency distributions
+
+```{r error=T}
+
+# Initiate cluster
+# cl <- makeCluster(no_cores)
+# clusterEvalQ(cl, source('ReportLib.R'))
+# clusterExport(cl, list("getBestStep", "as.duration", "data.table", "loadSimulationLogs", "fread", "rbindlist", "anytime", "getN", "nName"))
+
+allDurationsPerExperiment <- lapply(variants, function(variant){
+  relevantRequests <- lapply(variant$experiments, function(experiment){
+    best <- getBestStep(experiment)
+    requests <- loadSimulationLogs(experiment$experimentDir)
+    window <- requests[start > best$beginTime & end <= best$endTime]
+    
+    # print(plot_ly(window, mode = 'markers', type='scattergl', opacity=0.2) %>%
+      # add_trace(split = ~hostname, x=~end, y=~duration, text=~hostname, name="duration"))
+    
+    n = getN(nName, experiment$testDescription)
+    
+    window$n <- n
+    window$variant = variant$title
+    window$medianTP <- best$medianTP
+    window
+  })
+  rbindlist(relevantRequests)
+})
+
+# stopCluster(cl)
+
+saveRDS(allDurationsPerExperiment, paste0(resultDir, "/allDurationsPerExperiment.rds"))
+```
+
+```{r error=T}
+
+ggp <- ggplot() # + geom_violin(aes(x = start, y=duration)) 
+
+for(durations in allDurationsPerExperiment) {
+  ggp <- ggp + 
+    geom_violin(data=durations, aes(x = n, y=duration, group=n, colour=variant), alpha=0.2, draw_quantiles=c(0.1, 0.5, 0.90)) +
+    geom_line(data=durations, aes(x=n, y=medianTP, colour=variant))
+}
+
+ggp
+
+```
+
+### Before Last Best
+
+```{r error=T}
+
+lastBestAllDurationsPerExperiment <- lapply(variants, function(variant){
+  relevantRequests <- lapply(variant$experiments, function(experiment){
+    best <- getBestStep(experiment)
+    requests <- loadSimulationLogs(experiment$experimentDir)
+    window <- requests[start > best$lastBest$beginTime & end <= best$lastBest$endTime]
+    
+    # print(plot_ly(window, mode = 'markers', type='scattergl', opacity=0.2) %>%
+      # add_trace(split = ~hostname, x=~end, y=~duration, text=~hostname, name="duration"))
+    
+    n = getN(nName, experiment$testDescription)
+    
+    window$n <- n
+    window$variant = paste0(variant$title, "LB")
+    window$medianTP <- best$lastBest$medianTP
+    window
+  })
+  
+  rbindlist(relevantRequests)
+})
+
+
+ggp <- ggplot() # + geom_violin(aes(x = start, y=duration)) 
+
+for(durations in lastBestAllDurationsPerExperiment) {
+  ggp <- ggp + 
+    geom_violin(data=durations, aes(x = n, y=duration, group=n, colour=variant), alpha=0.2, draw_quantiles=c(0.1, 0.5, 0.90)) +
+    geom_line(data=durations, aes(x=n, y=medianTP, colour=variant))
+}
+
+ggp
+```
+
+```{r error=T}
+
+lastBestAllDurationsPerExperiment <- lapply(variants, function(variant){
+  relevantRequests <- lapply(variant$experiments, function(experiment){
+    best <- getBestStep(experiment)
+    requests <- loadSimulationLogs(experiment$experimentDir)
+    window <- requests[start > best$lastBest$lastBest$beginTime & end <= best$lastBest$lastBest$endTime]
+    
+    # print(plot_ly(window, mode = 'markers', type='scattergl', opacity=0.2) %>%
+      # add_trace(split = ~hostname, x=~end, y=~duration, text=~hostname, name="duration"))
+    
+    n = getN(nName, experiment$testDescription)
+    
+    window$n <- n
+    window$variant = paste0(variant$title, "LLB")
+    window$medianTP <- best$lastBest$lastBest$medianTP
+    window
+  })
+  
+  rbindlist(relevantRequests)
+})
+
+
+ggp <- ggplot() # + geom_violin(aes(x = start, y=duration)) 
+
+for(durations in lastBestAllDurationsPerExperiment) {
+  ggp <- ggp + 
+    geom_violin(data=durations, aes(x = n, y=duration, group=n, colour=variant), alpha=0.2, draw_quantiles=c(0.1, 0.5, 0.90)) +
+    geom_line(data=durations, aes(x=n, y=medianTP, colour=variant))
+}
+
+ggp
+```
+
+## Latency vs Throughput
+
+```{r error=T}
+
+allDurationsPerExperiment <- lapply(variants, function(variant){
+  relevantRequests <- lapply(variant$experiments, function(experiment){
+    best <- getBestStep(experiment)
+    requests <- loadSimulationLogs(experiment$experimentDir)
+    # as long as best is not empty
+    result <- list()
+    while(length(best) != 0) {
+      window <- requests[start > best$beginTime & end <= best$endTime & status == "OK", ]
+      
+      # IDEE: vanuit requests tps, calculeren, en dat als window gebruiken.
+      # of toch p99 lijn met deze data?
+      
+      # print(plot_ly(window, mode = 'markers', type='scattergl', opacity=0.2) %>%
+        # add_trace(split = ~hostname, x=~end, y=~duration, text=~hostname, name="duration"))
+      
+      n = getN(nName, experiment$testDescription)
+      
+      # if(n == 15) {
+      window$n <- n
+      window$variant = variant$title
+      window$medianTP <- best$medianTP
+      # print(best$medianTP)
+      result <- rbindlist(list(result, window))
+      # }
+      best <- best$lastBest
+    }
+    result
+  })
+  
+  # data <- 
+  rbindlist(relevantRequests) 
+  # ggplot() + geom_point(data = data, aes(x = medianTP, y=duration, group=medianTP, colour=variant))
+})
+
+allDurations <- rbindlist(allDurationsPerExperiment)
+
+# allDurations15 <- allDurations[n == 15,]
+
+for(nodeSize in levels(factor(allDurations$n))){
+ allDurationsN <- allDurations[n == nodeSize,] 
+ allDurationsN$medianTP <- as.numeric(as.character(allDurationsN$medianTP))
+ allDurationsN$medianTP <- as.factor(allDurationsN$medianTP)
+ g <- ggplot() + ggtitle(nodeSize) +
+  geom_violin(data = allDurationsN, aes(x = medianTP, y=duration, colour=variant, group=medianTP), draw_quantiles=c(0.1, 0.5, 0.90), scale = "width", width=10)
+  # geom_point(data = allDurations15, aes(x = medianTP, y=duration, group=medianTP, colour=variant))
+ 
+ print(g)
+}
+
+```
+
+### 99p per tps
+
+```{r error=T}
+
+allDurationsPerExperiment <- lapply(variants, function(variant){
+  relevantRequests <- lapply(variant$experiments, function(experiment){
+    # best <- getBestStep(experiment)
+    requests <- loadSimulationLogs(experiment$experimentDir)
+    ok <- requests[status == "OK", ]
+    # group by second, calculate 99p
+    result <- ok[,list(`99p` = quantile(duration, probs = c(0.99))[["99%"]], count = .N), by = list(start = floor_date(ok$start, "second"))]
+    
+    n = getN(nName, experiment$testDescription)
+    result$n <- n
+    result$variant <- variant$title
+    
+    result
+    
+    # list()
+    # result <- list()
+    # while(length(best) != 0) {
+    #   # IDEE: vanuit requests tps, calculeren, en dat als window gebruiken.
+    #   # of toch p99 lijn met deze data?
+    #   
+    #   # print(plot_ly(window, mode = 'markers', type='scattergl', opacity=0.2) %>%
+    #     # add_trace(split = ~hostname, x=~end, y=~duration, text=~hostname, name="duration"))
+    #   
+    #   n = getN(nName, experiment$testDescription)
+    #   
+    #   # if(n == 15) {
+    #   window$n <- n
+    #   window$variant = variant$title
+    #   window$medianTP <- best$medianTP
+    #   # print(best$medianTP)
+    #   result <- rbindlist(list(result, window))
+    #   # }
+    #   # best <- best$lastBest
+    # }
+    # result
+  })
+  
+  # data <- 
+  rbindlist(relevantRequests)
+  # ggplot() + geom_point(data = data, aes(x = medianTP, y=duration, group=medianTP, colour=variant))
+})
+
+allDurations <- rbindlist(allDurationsPerExperiment)
+
+# allDurations15 <- allDurations[n == 15,]
+
+for(nodeSize in levels(factor(allDurations$n))){
+ allDurationsN <- allDurations[n == nodeSize,] 
+ # allDurationsN$medianTP <- as.numeric(as.character(allDurationsN$medianTP))
+ # allDurationsN$medianTP <- as.factor(allDurationsN$medianTP)
+ g <- ggplot() + ggtitle(nodeSize) +
+    geom_line(data = allDurationsN, aes(x = count, y=`99p`, colour=variant, linetype="99p"))
+  # geom_violin(data = allDurationsN, aes(x = medianTP, y=duration, colour=variant, group=medianTP), draw_quantiles=c(0.1, 0.5, 0.90), scale = "width", width=10)
+  # geom_point(data = allDurations15, aes(x = medianTP, y=duration, group=medianTP, colour=variant))
+ 
+ print(g)
+}
+
+```
+
+### percentiles per window
+
+```{r error=T}
+
+allDurationsPerExperiment <- lapply(variants, function(variant){
+  relevantRequests <- lapply(variant$experiments, function(experiment){
+    best <- getBestStep(experiment)
+    requests <- loadSimulationLogs(experiment$experimentDir)
+    # as long as best is not empty
+    result <- list()
+    while(length(best) != 0) {
+      window <- requests[start > best$beginTime & end <= best$endTime & status == "OK", ]
+      
+      percentiles <- quantile(window$duration, probs = c(0.50, 0.75, 0.95, 0.99, 0.999, 1))
+      
+      n = getN(nName, experiment$testDescription)
+      windowResult <- list(
+        n = n,
+        variant = variant$title,
+        medianTP = best$medianTP,
+        `50p` = percentiles[["50%"]],
+        `75p` = percentiles[["75%"]],
+        `95p` = percentiles[["95%"]],
+        `99p` = percentiles[["99%"]],
+        `999p` = percentiles[["99.9%"]],
+        `100p` = percentiles[["100%"]]
+      )
+      result <- rbindlist(list(result, windowResult))
+      # iteratate over all
+      best <- best$lastBest
+    }
+    result
+  })
+  
+  # data <- 
+  rbindlist(relevantRequests) 
+  # ggplot() + geom_point(data = data, aes(x = medianTP, y=duration, group=medianTP, colour=variant))
+})
+
+allDurations <- rbindlist(allDurationsPerExperiment)
+
+allDurations$variant <- gsub("1000CDAC", "1000PSAC", allDurations$variant)
+
+saveRDS(allDurations, paste0(resultDir, "/percentiles.rds"))
+
+# allDurations15 <- allDurations[n == 15,]
+
+for(nodeSize in levels(factor(allDurations$n))){
+ allDurationsN <- allDurations[n == nodeSize,]
+ # allDurationsN$medianTP <- as.numeric(as.character(allDurationsN$medianTP))
+ # allDurationsN$medianTP <- as.factor(allDurationsN$medianTP)
+ g <- ggplot() + ggtitle(paste0("N = ", nodeSize)) +
+   geom_line(data = allDurationsN, aes(x = medianTP, y=`99p`, colour=variant, linetype="99p")) +
+    geom_line(data = allDurationsN, aes(x = medianTP, y=`50p`, colour=variant, linetype="50p")) +
+  # geom_line(data = allDurationsN, aes(x = medianTP, y=`999p`, colour=variant, linetype="999p")) +
+   # geom_line(data = allDurationsN, aes(x = medianTP, y=`75p`, colour=variant, linetype="75p")) +
+    geom_line(data = allDurationsN, aes(x = medianTP, y=`95p`, colour=variant, linetype="95p")) +
+   xlab("Throughput") + ylab("Latency")
+  # geom_violin(data = allDuration, aes(x = medianTP, y=duration, colour=variant, group=medianTP), draw_quantiles=c(0.1, 0.5, 0.90), scale = "width", width=10)
+  # geom_point(data = allDurations15, aes(x = medianTP, y=duration, group=medianTP, colour=variant))
+ 
+ print(g)
+}
+
+```
+
+### percentiles per window facetted
+
+```{r error=T}
+
+# allDurationsPerExperiment <- lapply(variants, function(variant){
+#   relevantRequests <- lapply(variant$experiments, function(experiment){
+#     best <- getBestStep(experiment)
+#     requests <- loadSimulationLogs(experiment$experimentDir)
+#     # as long as best is not empty
+#     result <- list()
+#     while(length(best) != 0) {
+#       window <- requests[start > best$beginTime & end <= best$endTime & status == "OK", ]
+#       
+#       percentiles <- quantile(window$duration, probs = c(0.50, 0.75, 0.95, 0.99, 0.999, 1))
+#       
+#       n = getN(nName, experiment$testDescription)
+#       windowResult <- list(
+#         n = n,
+#         variant = variant$title,
+#         medianTP = best$medianTP,
+#         `50p` = percentiles[["50%"]],
+#         `75p` = percentiles[["75%"]],
+#         `95p` = percentiles[["95%"]],
+#         `99p` = percentiles[["99%"]],
+#         `999p` = percentiles[["99.9%"]],
+#         `100p` = percentiles[["100%"]]
+#       )
+#       result <- rbindlist(list(result, windowResult))
+#       # iteratate over all
+#       best <- best$lastBest
+#     }
+#     result
+#   })
+#   
+#   # data <- 
+#   rbindlist(relevantRequests) 
+#   # ggplot() + geom_point(data = data, aes(x = medianTP, y=duration, group=medianTP, colour=variant))
+# })
+# 
+# allDurations <- rbindlist(allDurationsPerExperiment)
+# 
+# allDurations$variant <- gsub("1000CDAC", "1000PSAC", allDurations$variant)
+
+# allDurations15 <- allDurations[n == 15,]
+
+# for(nodeSize in levels(factor(allDurations$n))){
+ # allDurationsN <- allDurations[n == nodeSize,]
+ # allDurationsN$medianTP <- as.numeric(as.character(allDurationsN$medianTP))
+ # allDurationsN$medianTP <- as.factor(allDurationsN$medianTP)
+ # g <- 
+   
+ggplot() + #ggtitle(paste0("N = ", nodeSize)) +
+     # geom_line(data = allDurations, aes(x = medianTP, y=`100p`, colour=variant, linetype="max")) +
+   geom_line(data = allDurations, aes(x = medianTP, y=`99p`, colour=variant, linetype="99p")) +
+    geom_line(data = allDurations, aes(x = medianTP, y=`50p`, colour=variant, linetype="50p")) +
+  # geom_line(data = allDurations, aes(x = medianTP, y=`999p`, colour=variant, linetype="999p")) +
+   # geom_line(data = allDurations, aes(x = medianTP, y=`75p`, colour=variant, linetype="75p")) +
+    geom_line(data = allDurations, aes(x = medianTP, y=`95p`, colour=variant, linetype="95p")) +
+   xlab("Throughput (tps)") + ylab("Latency (ms)") +
+   facet_wrap(~n, scales="free_x")
+  # geom_violin(data = allDuration, aes(x = medianTP, y=duration, colour=variant, group=medianTP), draw_quantiles=c(0.1, 0.5, 0.90), scale = "width", width=10)
+  # geom_point(data = allDurations15, aes(x = medianTP, y=duration, group=medianTP, colour=variant))
+ 
+ # print(g)
+# }
+
+```
+
+
+## USL Fit
+
+```{r error=TRUE}
+
+p <- plot_ly(type = 'scatter', mode = 'markers')  %>%
+    layout(xaxis= list(title=nName), yaxis = list(title = 'Throughput'))
+
+maximum <- 0
+
+usl.result <- list()
+
+for(bb in variantBenchmarks) {
+  print(bb$title)
+  usl.model <- tryCatch({usl(throughput ~ n, bb$benchmark, method="default")},
+    error=function(e){
+      cat("ERROR :",conditionMessage(e), "\n")
+      tryCatch({usl(throughput ~ n, bb$benchmark, method="nls")},
+    error=function(e){
+      cat("ERROR :",conditionMessage(e), "\n")
+      usl(throughput ~ n, bb$benchmark, method="nlxb")})
+    })
+  
+  if(inherits(usl.model, "error")) next
+  
+  summary <- summary(usl.model)$coefficients
+  print(summary)
+  usl.result[[ bb$title ]] <- usl.model
+  # TODO make sure this is added to variantBenchmarks
+  # bb$benchmark$usl.kappa = summary$kappa
+  
+  s <- scalability(usl.model)
+  
+  # linear <- function(N) { N * s(1) }
+  # only works when n=1 is in the set
+  # s1 <- bb$tp1
+  # if(length(s1) == 0) {
+  #   s1 <- s(1)
+  # }
+  # linear <- function(N) { N * s1 }
+  linear2 <- scalability(usl.model,0,0)
+  
+  maxX = max(bb$benchmark$n) * 3
+
+  p <- add_trace(p, x=bb$benchmark$n, y=bb$benchmark$throughput, name=bb$title) %>% #, name=t$hostname)
+     # add_trace(p, x=bb$benchmark$n, y=bb$benchmark$failures) %>%
+     add_lines(x = 0:maxX, y = s(0:maxX), name=paste0(bb$title, " USL")) %>% 
+     # add_lines(x = 0:maxX, y = linear(0:maxX), line = list(dash="dash"), name=paste0(bb$title, " linear"))  %>% 
+     add_lines(x = 0:maxX, y = linear2(0:maxX), line = list(dash="dash"), name=paste0(bb$title, " linear"))
+  maximum <- max(max(max(bb$benchmark$throughput), s(0:maxX))*1.1, maximum)
+}
+
+for (i in seq_along(usl.result)) {
+  name = names(usl.result)[[i]]
+  usl.model <- usl.result[[i]]
+  result = coef(usl.model)
+  print(name)
+  print(result)
+  print(paste("peak.scalability ", peak.scalability(usl.model)))
+  print(paste("scale.factor ", usl.model$scale.factor))
+  NULL
+}
+# saveRDS(usl.result, paste0(resultDir, "/usl.result.rds"))
+
+p %>% layout(yaxis = list(range = c(0, maximum))) 
+```
+
+### USL with all tps
+
+```{r error=TRUE}
+
+p <- plot_ly(type = 'scatter', mode = 'markers')  %>%
+    layout(xaxis= list(title=nName), yaxis = list(title = 'Throughput (tps)'))
+
+maximum <- 0
+
+usl.result.tps <- list()
+
+for(variantBeanPlot in variantBeans) {
+  variantName = variantBeanPlot$variant[[1]]
+  print(variantName)
+  
+  ori <- variantBeanPlot
+  # variantBeanPlot <- variantBeanPlot[n < 13,]
+  
+  usl.model <- tryCatch({usl(ok ~ n, variantBeanPlot, method="default")},
+    error=function(e){
+      cat("ERROR :",conditionMessage(e), "\nUsing nls\n")
+      tryCatch({usl(ok ~ n, variantBeanPlot, method="nls")},
+    error=function(e){
+      cat("ERROR :",conditionMessage(e), "\nUsing nlxb\n")
+      tryCatch(usl(ok ~ n, variantBeanPlot, method="nlxb"), error=function(e){
+         cat("ERROR :",conditionMessage(e), "\n")
+         NULL
+      })
+    })
+  })
+  
+  if(is.null(usl.model) || inherits(usl.model, "error")) {
+    cat("Skipping ", variantName, " because NULL or error")
+    next
+  }
+  
+  summary <- summary(usl.model)$coefficients
+  print(summary)
+  usl.result.tps[[ variantName ]] <- usl.model
+  
+  s <- scalability(usl.model)
+  linear2 <- scalability(usl.model,0,0)
+  
+  maxX = max(variantBeanPlot$n) * 3
+
+  p <- add_trace(p, x=ori$n, y=ori$ok, name=variantName) %>% #, name=t$hostname)
+     # add_trace(p, x=bb$benchmark$n, y=bb$benchmark$failures) %>%
+     add_lines(x = 0:maxX, y = s(0:maxX), name=paste0(variantName, " USL")) %>% 
+     # add_lines(x = 0:maxX, y = linear(0:maxX), line = list(dash="dash"), name=paste0(variantName, " linear"))  %>% 
+     add_lines(x = 0:maxX, y = linear2(0:maxX), line = list(dash="dash"), name=paste0(variantName, " linear"))
+  maximum <- max(max(max(variantBeanPlot$ok), s(0:maxX))*1.1, maximum)
+}
+
+for (i in seq_along(usl.result.tps)) {
+  name = names(usl.result.tps)[[i]]
+  usl.model <- usl.result.tps[[i]]
+  result = coef(usl.model)
+  print(name)
+  print(result)
+  print(paste("peak.scalability ", peak.scalability(usl.model)))
+  print(paste("scale.factor ", usl.model$scale.factor))
+  NULL
+}
+saveRDS(usl.result.tps, paste0(resultDir, "/usl.result.rds"))
+
+p %>% layout(yaxis = list(range = c(0, maximum))) 
+```
+
+# ```{r error=TRUE}
+# twopc <- data.table(
+#   N = c(1,3,6,9,12),
+#   X = c(250, 500, 790, 1000, 1250)
+# )
+# 
+# cdac <- data.table(
+#   N = c(1,3,6,9,12),
+#   X = c(250, 600, 1100, 1800, 2000)
+# )
+# 
+# lin <- data.table(
+#   N = c(1,3,6,9,12),
+#   X = c(250, 750, 6*250, 9*250, 12*250)
+# )
+# 
+# 
+# plot_ly(mode = 'trace') %>% 
+#   add_trace(twopc, x=twopc$N, y=twopc$X, name='2pc') %>% 
+#   add_trace(cdac, x=cdac$N, y=cdac$X, name='CDAC') %>% 
+#   add_trace(x=lin$N, y=lin$X, name='CDAClinear')
+#   
+# ```
+
+## Amdahl
+
+```{r error=TRUE}
+
+p <- plot_ly(type = 'scatter', mode = 'markers')  %>%
+    layout(xaxis= list(title='Count'), yaxis = list(title = 'Throughput'))
+
+maximum <- 0
+
+amdahl.fit <- list()
+
+# for(bb in variantBenchmarks) {
+for(variantBeanPlot in variantBeans) {
+  variantName = variantBeanPlot$variant[[1]]
+  print(variantName)
+  
+  amdahl.model <- nls(ok ~ (lambda * n) / (1 + sigma * (n - 1)), variantBeanPlot, start=c(sigma=0.1, lambda=1000))
+  
+  print(summary(amdahl.model))
+  
+  sigma <- coef(amdahl.model)['sigma']
+  lambda <- coef(amdahl.model)['lambda']
+  
+  amdahl.fit[[ variantName ]] <- amdahl.model
+  
+  g = function(n){ y = (lambda * n) / (1 + sigma * (n - 1)) }
+  
+  linear <- function(N) { N * lambda }
+  
+  maxX = max(bb$benchmark$n) * 2
+
+  p <- add_trace(p, x=variantBeanPlot$n, y=variantBeanPlot$ok, name=bb$title) %>% #, name=t$hostname)
+     # add_trace(p, x=bb$benchmark$n, y=bb$benchmark$failures) %>%
+     add_lines(x = 0:maxX, y = g(0:maxX), linetype=paste0(bb$title, " Amdahl")) %>% 
+     add_lines(x = 0:maxX, y = linear(0:maxX), line = list(dash="dash"), linetype=paste0(bb$title, " linear"))
+  maximum <- max(max(max(bb$benchmark$throughput), g(0:maxX))*1.1, maximum)
+}
+
+saveRDS(amdahl.fit, paste0(resultDir, "/amdahl.fit.rds"))
+
+p %>% layout(yaxis = list(range = c(0, maximum))) 
+
+```
+```{r error=T}
+psac2pc1000 <- all
+
+# better titles
+psac2pc1000$variant <- gsub("10002PC", "10002PL/2PC", psac2pc1000$variant)
+psac2pc1000$variant <- gsub("1000CDAC", "1000PSAC", psac2pc1000$variant)
+psac2pc1000$variant <- gsub("1000StaticPSAC", "1000LoCA^SD", psac2pc1000$variant)
+
+amdahl.fits <- amdahl.fit
+
+# amdahlResult <- lapply(amdahl.fits, function(amdahl.fit) { 
+#   result <- as.list(coef(amdahl.fit))
+#   result$lambda <- coef(amdahl.fit)['lambda']
+#   result$sigma <- coef(amdahl.fit)['sigma']
+#   result
+#   })
+# 
+# twopc <- amdahlResult[["10002PC"]]
+# psac <- amdahlResult[["1000CDAC"]]
+# locasd <- amdahlResult[["1000StaticPSAC"]]
+
+amdahl <- function(lambda, sigma){ function(n) {(lambda * n) / (1 + sigma * (n - 1))} }
+  
+linear <- function(N) { N * lambda }
+
+psac2pc1000Numeric <- psac2pc1000
+psac2pc1000Numeric$n <- as.numeric(as.character(psac2pc1000Numeric$n))
+
+# Manually like this because ggplot and loops don't go well together. No rasterization of formula's because they need different markup anyway, os ould not reduce code
+ggplot(data.frame(x=c(1: 30)), aes(x)) +
+# ggplot(psac2pc1000, aes(group=variant, y=count, x=n, colour=variant)) +
+  # geom_violin(data = psac2pc1000Numeric, aes(y=count, x=n, group=interaction(n, variant), colour=variant), show.legend=F, scale = "width", alpha = 0) +
+  geom_violin(data = psac2pc1000Numeric[variant=="10002PL/2PC",], aes(y=count, x=n, group=n, colour=variant, linetype=variant), show.legend=F, scale = "width", alpha = 0) +
+  geom_violin(data = psac2pc1000Numeric[variant=="1000PSAC",], aes(group=n, y=count, x=n, colour=variant, linetype=variant), show.legend=F, scale = "width", alpha = 0) +
+  geom_violin(data = psac2pc1000Numeric[variant=="1000LoCA^SD",], aes(group=n, y=count, x=n, colour=variant, linetype=variant), show.legend=F, scale = "width", alpha = 0) +
+  geom_jitter(data = psac2pc1000Numeric, aes(group=variant, y=count, x=n, colour=variant), alpha = 0.2, width = 0.2) +
+  xlab("Number of nodes") + ylab("Throughput (tps)") +
+  # geom_smooth(method = "nls", formula = ok ~ (lambda * n) / (1 + sigma * (n - 1)) ) +
+  # geom_line(aes(y=predict(twopc), colour="2PC")) +
+  # fits
+  stat_function(fun=amdahl(coef(amdahl.fits[["10002PC"]])['lambda'], coef(amdahl.fits[["10002PC"]])['sigma']), aes(colour="10002PL/2PC", linetype="10002PL/2PC")) +
+  stat_function(fun=amdahl(coef(amdahl.fits[["10002PC"]])['lambda'], 0), aes(colour="10002PL/2PC", linetype="10002PL/2PC"), alpha=0.2) +
+  # linear
+  stat_function(fun=amdahl(coef(amdahl.fits[["1000PSAC"]])['lambda'], coef(amdahl.fits[["1000PSAC"]])['sigma']), aes(colour="1000PSAC", linetype="1000PSAC")) +
+  stat_function(fun=amdahl(coef(amdahl.fits[["1000PSAC"]])['lambda'], 0), aes(colour="1000PSAC", linetype="1000PSAC"), alpha=0.2) +
+  
+  stat_function(fun=amdahl(coef(amdahl.fits[["1000StaticPSAC"]])['lambda'], coef(amdahl.fits[["1000StaticPSAC"]])['sigma']), aes(colour="1000LoCA^SD", linetype="1000LoCA^SD")) +
+  stat_function(fun=amdahl(coef(amdahl.fits[["1000StaticPSAC"]])['lambda'], 0), aes(colour="1000LoCA^SD", linetype="1000LoCA^SD"), alpha=0.2) +
+  # guides(color = guide_legend(override.aes = list(linetype = c("solid", "dotted")))) +
+  # theme(legend.position="bottom") +
+  labs(color='variant') + scale_y_continuous(labels=formatterK) + coord_cartesian(ylim = c(0, 3000), xlim= c(0,15)) 
+```
+
+## Gustafson
+
+\[\sigma + N(1-\sigma)\]
+
+\[
+X^{G}(N) = \lambda (\sigma + N(1-\sigma))
+\]
+
+```{r error=TRUE}
+
+p <- plot_ly(type = 'scatter', mode = 'markers')  %>%
+    layout(xaxis= list(title='Count'), yaxis = list(title = 'Throughput'))
+
+maximum <- 0
+
+
+for(bb in variantBenchmarks) {
+  print(bb$title)
+  
+  gastafson.model <- nls(throughput ~ lambda * (sigma + n * (1 - sigma)), bb$benchmark, start=c(sigma=0.1, lambda=1000))
+  
+
+  # usl.model <- tryCatch({usl(throughput ~ nodeCount, bb$benchmark, method="nls")},
+  #   error=function(e){cat("ERROR :",conditionMessage(e), "\n"); e})
+  # 
+  # if(inherits(usl.model, "error")) next
+  # 
+  print(summary(gastafson.model))
+  
+  sigma <- coef(gastafson.model)['sigma']
+  lambda <- coef(gastafson.model)['lambda']
+  
+  g = function(n){ y = lambda * (sigma + n * (1 - sigma)) }
+  
+  linear <- function(N) { N * lambda }
+  
+  maxX = max(bb$benchmark$n) * 2
+
+  p <- add_trace(p, x=bb$benchmark$n, y=bb$benchmark$throughput, name=bb$title) %>% #, name=t$hostname)
+     # add_trace(p, x=bb$benchmark$n, y=bb$benchmark$failures) %>%
+     add_lines(x = 0:maxX, y = g(0:maxX), linetype=paste0(bb$title, " Gustafson")) %>% 
+     add_lines(x = 0:maxX, y = linear(0:maxX), line = list(dash="dash"), linetype=paste0(bb$title, " linear"))
+  maximum <- max(max(max(bb$benchmark$throughput), g(0:maxX))*1.1, maximum)
+}
+p %>% layout(yaxis = list(range = c(0, maximum))) 
+
+```
+
+# Raw Data analysis
+
+## disabled
+
+<!--
+```{r error=T}
+variantBeanPlots <- lapply(variants, function(variant) {
+  results <- lapply(variant$experiments, function(exp) {
+    requests <- loadSimulationLogs(exp$experimentDir)
+    n <- getN(nName, exp$testDescription)
+    requests[,n:=n]
+    # requests$nodeCount <- rep(nodeCount,nrow(requests)) 
+    requests
+    })
+  
+  # pirateplot(duration ~ request , data=requests, point.o = .005, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, jitter.val=.2, point.cex=0.5)
+  # print(results)
+  combined <- rbindlist(results)
+  combined[,variant:=variant$title]
+  # combined$variant <- rep(variant$title,nrow(combined)) 
+  combined
+})
+
+# print(variantBeanPlots)
+for(variantBeanPlot in variantBeanPlots) {
+  pirateplot(duration ~ n , data=variantBeanPlot, point.o = .01, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, jitter.val=.2, point.cex=0.5,
+             main = variantBeanPlot$variant[[1]])
+}
+
+pirateplot(duration ~ variant , data=rbindlist(variantBeanPlots), point.o = .005, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, jitter.val=.2, point.cex=0.5)
+
+```
+-->

@@ -1,0 +1,42 @@
+
+image: "hseeberger/scala-sbt:latest"
+
+variables:
+  SBT_OPTS: "-Dsbt.global.base=sbt-cache/.sbtboot -Dsbt.boot.directory=sbt-cache/.boot -Dsbt.ivy.home=sbt-cache/.ivy"
+
+cache:
+  key: "$CI_BUILD_REF_NAME" # contains either the branch or the tag, so it's caching per branch
+  untracked: true
+  paths:
+    - "sbt-cache/.ivy/cache"
+    - "sbt-cache/.boot"
+    - "sbt-cache/.sbtboot"
+    - "sbt-cache/target"
+
+stages:
+  - build
+  - test
+  - publish
+
+build:
+  stage: build
+  script:
+    - sbt clean compile
+  tags:
+    - general-builder
+
+test:
+  stage: test
+  script:
+    - sbt '; set parallelExecution in Test := false; testQuick -- -l com.ing.util.CassandraTag'
+    - sbt '; set parallelExecution in Test := false; generated/it:testQuick -- -l com.ing.util.CassandraTag'
+    - sbt '; set parallelExecution in Test := false; generated/multi-jvm:testQuick -- -l com.ing.util.CassandraTag'
+  tags:
+    - general-builder
+
+publish:
+  stage: publish
+  script:
+    - sbt publish
+  tags:
+    - general-builder

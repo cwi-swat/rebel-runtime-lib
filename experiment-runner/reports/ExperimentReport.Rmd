@@ -1,0 +1,723 @@
+---
+output:
+  html_document:
+    fig_width: 15
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r set-options, echo=FALSE, cache=FALSE}
+options(height = 10000, width = 100)
+```
+
+## Report
+```{r echo=FALSE, message=FALSE}
+
+source("ReportLib.R")
+
+defaultFilePath <- "/Users/tim/workspace/account-modelling/ing-codegen-akka/results/Interesting/2018-12-04T16:13:16.183+01:00-2PCvsCDACClosedContention1000FindMaxAlt/1000CDAC/20568316-f7d7-11e8-be49-c49e6d304df4-com.ing.corebank.rebel.simple_transaction.closedsystem.rampup.AllToAllSimulation-u4000-m4.xlarge-n21-c42-p1"
+
+option_list <- list(
+  # make_option(c("-dir", "--from-directory"), action="store_true", default=FALSE,
+    # help="Count the line numbers [default]"),
+  make_option(c("-f", "--file"), default=defaultFilePath,
+    help="File to process")
+)
+
+parser <- OptionParser(usage="%prog [options] file", option_list=option_list)
+
+args <- parse_args(parser, positional_arguments = 0)
+opt <- args$options
+resultDir <- args$options$file
+resultDir
+# parse_args(parser, args = c("--help"))
+# parse_args(parser, args = c("-f", "75"), positional_arguments = TRUE)
+# parse_args(parser, args = c(), positional_arguments = TRUE)
+```
+
+<!-- ## Reading csv -->
+
+```{r error=T}
+experiment <- loadExperiment(resultDir)
+```
+
+```{r echo=FALSE}
+
+print(toJSON(experiment$testDescription, pretty = T))
+
+print(sprintf("Experiment start time: %s", experiment$performanceStartTime))
+print(sprintf("Experiment end time: %s", experiment$performanceEndTime))
+
+```
+
+```{r}
+gt <- gatlingTotals(experiment)
+plot_ly(gt$allTotal, x=~time, y = ~count, name = 'all count', type = 'scatter', mode = 'lines', fill = 'tozeroy') %>%
+  # add_trace(y = ~all$count, name = 'all2 count') %>%
+  add_trace(y = ~ko, name = 'ko count') %>%
+  add_trace(y = ~ok, name = 'ok count') %>%
+  layout(title='Requests over time', yaxis = list(title = 'Request count'), xaxis= list(title='Time'))
+```
+
+## Responses per step
+
+```{r error=T}
+plot_ly(getBestStep(experiment)$data, split=~status, x=~time, y=~count, mode = 'markers', type='scatter')
+```
+
+```{r}
+pirateplot(count ~ status , data=experiment$gatling, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0)
+```
+
+```{r}
+pirateplot(count ~ request , data=experiment$gatling, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0)
+```
+
+```{r}
+pirateplot(count ~ host , data=experiment$gatling, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0)
+```
+
+```{r}
+pirateplot(percentiles99 ~ status , data=experiment$gatling, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0)
+```
+
+## Users/connections over time
+```{r}
+# users
+plot_ly(gt$users, x=~time, y=~active, name = 'all count', type = 'scatter', mode = 'lines', fill = 'tozeroy')
+```
+
+<!-- ## Graph per metric per hostname -->
+<!-- ```{r} -->
+<!-- kt <- data.table(kamonTimers) -->
+
+<!-- showMetric <- function(entty, metri){ -->
+<!--   cpu <- kt[entity==entty] -->
+
+<!--   cpuPerHost <- split(cpu, cpu$hostname) -->
+<!--     # remove last because it is somehow always "hostname" -->
+<!--   cpuPerHost <- cpuPerHost[1:length(cpuPerHost)-1] -->
+<!--   # print(cpuPerHost) -->
+
+<!--   ps <- lapply(cpuPerHost, function(cp) { -->
+<!--     metrics <- cp[metric==metri] -->
+<!--     plot_ly(metrics, x=~time, y = ~mean, type = 'scatter', mode = 'lines', name = sprintf('mean %s', metri), fill = 'tozeroy') %>% -->
+<!--     add_trace(y = ~cp[metric=="cpu-system"]$mean, name = 'mean cpu-system') %>%  -->
+<!--     layout(  -->
+<!--       # shapes=list(type='line', x0= 1, x1= 1, line=list(dash='dot', width=1)), -->
+<!--       yaxis = list( -->
+<!--          ticksuffix = '%', -->
+<!--          domain = c(0,1.0) -->
+<!--         ) -->
+<!--       ) -->
+<!--   }) -->
+
+<!--   # print(cpuPerHost) -->
+<!--   # print(length(cpuPerHost)) -->
+
+<!--   p <- subplot(ps, nrows = length(cpuPerHost), shareX = TRUE)  -->
+<!--   # %>%  -->
+<!--   #   layout(  -->
+<!--   #     yaxis = list( -->
+<!--   #       title = "", -->
+<!--   # zeroline = FALSE, -->
+<!--   # showline = FALSE, -->
+<!--   # showticklabels = FALSE, -->
+<!--   # showgrid = FALSE -->
+<!--   #     )  -->
+<!--   #   ) -->
+<!--   #  -->
+<!--   p -->
+<!-- } -->
+
+<!-- showMetric("cpu", "cpu-user") -->
+
+<!--  # showMetric("memory", "memory-used") -->
+
+<!-- # kt[entity=="memory"] -->
+<!-- # # showMetric("memory", "memory-used") -->
+<!-- mem <- kt[entity=="memory"] -->
+<!-- memPerHost <- split(mem, mem$hostname) -->
+<!-- memPerHost <- memPerHost[1:length(memPerHost)-1] -->
+<!-- #  -->
+<!-- ps <- lapply(memPerHost, function(c) { -->
+<!--   plot_ly(c[metric=="memory-used"], x=~time, y = ~mean, type = 'scatter', mode = 'lines', name = sprintf('mean %s', "memory-used"), fill = 'tozeroy') %>% -->
+<!--   # add_trace(y = ~c[metric=="cpu-system"]$mean, name = 'mean cpu-system') %>% -->
+<!--   layout( -->
+<!--     yaxis = list( -->
+<!--        # ticksuffix = '%' -->
+<!--       ) -->
+<!--     ) -->
+<!-- }) -->
+
+<!-- subplot(ps, nrows = length(memPerHost), shareX = TRUE) -->
+
+<!-- ``` -->
+
+## Graph per metric, hostname
+
+```{r error=T}
+# kt
+
+# print(levels(cpu$entity))
+
+showMetric <- function(dataName, metri, ymax, selector="mode", value="max", split="none"){
+  metrics <- getMetricsData(experiment, dataName, F)[get(selector) == metri,]
+     # experiment$kamonTimers[metric == metri] 
+  
+  p <- metrics %>%
+    plot_ly(mode = 'lines+markers', type='scatter') %>% 
+    group_by(host) %>% 
+    layout(xaxis= list(title='Time'), yaxis = list(title = metri)) %>% hide_legend()
+  
+    p <- if(split != "none") {
+      p %>% add_trace(split = ~get(split), name = paste0(metrics$host, get(split, metrics)), x = ~time, y = ~get(value), text=paste0(metrics$host, get(split, metrics)))
+    } else {
+       p %>% add_trace(name = ~host, x = ~time, y = ~get(value), text=~host)
+    }
+    # p <- if("segment" %in% colnames(metrics)){
+    #     p %>% add_trace(split = ~segment, name = ~host, x = ~time, y = ~get(value), text=~host)
+    # } else {
+    #     p %>% add_trace(name = ~host, x = ~time, y = ~get(value), text=~host)
+    # }
+  p
+}
+
+metrics <- list(
+  showMetric("host.cpu", "combined", 100, "mode"),
+  # showMetric("cpu-user", 100),
+  # showMetric("cpu-system", 100),
+  showMetric("jvm.memory", "used", 1500000000, "measure", "max", "segment"),
+  showMetric("akka.http.server.active-requests", "akka.http.server.active-requests", 100, "name"),
+  # showMetric("mailbox-size")
+  showMetric("akka.http.server.open-connections", "akka.http.server.open-connections", 100, "name")
+  # showMetric("connection-open")
+)
+
+subplot(metrics, nrows = length(metrics), shareX = TRUE, titleY = TRUE)  #%>%
+    # layout(legend = list(xanchor="center",yanchor="top",x = -0.3, y = -0.3))
+```
+
+# ```{r error=T}
+# metrics <- levels(experiment$kamonTimers$metric)
+# 
+# multiMetrics <- function(metrics) {
+# graphs <- lapply(metrics, function(metric) {
+#     showMetric(metric) %>% layout(annotations = list(
+#       text = metric,
+#       xref = "paper",
+#       yref = "paper",
+#       yanchor = "bottom",
+#       xanchor = "center",
+#       align = "center",
+#       x = 0.5,
+#       y = 1,
+#       showarrow = FALSE
+#     ))
+# })
+# 
+# 
+# subplot(graphs, nrows = as.integer(length(graphs) / 2), shareX = TRUE)
+# }
+# 
+# multiMetrics(metrics[1:10])
+# multiMetrics(metrics[11:20])
+# multiMetrics(metrics[21:30])
+# multiMetrics(metrics[31:40])
+# multiMetrics(metrics[41:50])
+# multiMetrics(metrics[51:60])
+# multiMetrics(metrics[61:70])
+# multiMetrics(metrics[71:75])
+# ```
+
+
+## Kamon stats
+
+### Span processing time
+
+```{r error=T}
+
+spans <- getMetricsData(experiment, "span.processing-time")
+
+spans$`p99.9` <- nanoseconds(spans$`p99.9`)$second
+spans$`p99.0` <- nanoseconds(spans$`p99.0`)$second
+spans$`p95.0` <- nanoseconds(spans$`p95.0`)$second
+spans$`p90.0` <- nanoseconds(spans$`p90.0`)$second
+spans$`p70.0` <- nanoseconds(spans$`p70.0`)$second
+spans$`p50.0` <- nanoseconds(spans$`p50.0`)$second
+
+head(spans)
+# head(experiment$kamonTimers[category == "trace-segment",])
+# 
+spans %>%
+  plot_ly(mode = 'lines+markers', type='scatter') %>%
+  group_by(host, parentOperation) %>%
+  
+  # group_by() %>%
+  # add_trace(split = ~entity, name = ~trace, x = ~time, y = ~`p99.9`, text=~host)
+  add_trace(split = ~operation, x = ~time, y = ~`p99.9`, text = paste('host: ', spans$host, 
+                              '\n p99.9: ', spans$`p99.9`,
+                              '\n p99: ', spans$`p99.0`,
+                              '\n p95: ', spans$`p95.0`,
+                              '\n p90, ', spans$`p90.0`,
+                              '\n p70, ', spans$`p70.0`,
+                              '\n p50: ', spans$`p50.0`
+                              ), name=paste0(spans$parentOperation, spans$operation))
+
+```
+
+### Span split per host
+
+```{r error=T, fig.show='hold'}
+
+# spans <- getMetricsData(experiment, "span.processing-time")
+# 
+# spans$`p99.9` <- nanoseconds(spans$`p99.9`)$second
+# spans$`p99.0` <- nanoseconds(spans$`p99.0`)$second
+# spans$`p95.0` <- nanoseconds(spans$`p95.0`)$second
+# spans$`p90.0` <- nanoseconds(spans$`p90.0`)$second
+# spans$`p70.0` <- nanoseconds(spans$`p70.0`)$second
+# spans$`p50.0` <- nanoseconds(spans$`p50.0`)$second
+
+# head(spans)
+# head(experiment$kamonTimers[category == "trace-segment",])
+# 
+
+l <- levels(droplevels(spans$operation))
+
+m <- lapply(l, function(o) {
+# for(o in l) {
+
+  opera <- spans[operation == o,]
+  
+  p <- opera %>%
+  plot_ly(type = 'scatter', mode = 'lines') %>% 
+           layout(title = o) %>%
+  group_by(host, parentOperation) %>%
+  
+  # group_by() %>%
+  # add_trace(split = ~entity, name = ~trace, x = ~time, y = ~`p99.9`, text=~host)
+  add_trace(x = ~time, y = ~`p99.9`, text = ~host, name=paste0('p99.9', opera$parentOperation)) %>%
+  add_trace(x = ~time, y = ~`p99.0`, text = ~host, name=paste0('p99.0', opera$parentOperation)) %>%
+  add_trace(x = ~time, y = ~`p95.0`, text = ~host, name=paste0('p95.0', opera$parentOperation)) %>%
+  add_trace(x = ~time, y = ~`p90.0`, text = ~host, name=paste0('p90.0', opera$parentOperation)) %>%
+  add_trace(x = ~time, y = ~`p70.0`, text = ~host, name=paste0('p70.0', opera$parentOperation)) %>%
+  add_trace(x = ~time, y = ~`p50.0`, text = ~host, name=paste0('p50.0', opera$parentOperation))
+            # paste('host: ', spans$host, 
+            #                   '\n p99.9: ', spans$`p99.9`,
+            #                   '\n p99: ', spans$`p99.0`,
+            #                   '\n p95: ', spans$`p95.0`,
+            #                   '\n p90, ', spans$`p90.0`,
+            #                   '\n p70, ', spans$`p70.0`,
+            #                   '\n p50: ', spans$`p50.0`
+            #                   )
+  # print(p)
+# }
+})
+
+print(as.list(m))
+ 
+subplot(m, nrows = length(m), shareX = TRUE, titleY = TRUE)
+
+```
+
+## C* Metrics
+
+```{r error=T}
+ay <- list(
+  # tickfont = list(color = "red"),
+  overlaying = "y",
+  side = "right",
+  range = c(0,1)
+)
+
+
+# todo should be without `compute.internal.jvm.`
+experiment$db %>%
+  plot_ly(mode = 'lines+markers', type='scatter') %>%
+  group_by(host) %>%
+  # group_by(trace) %>%
+  add_trace(x = ~time, y = ~os.systemCpuLoad, name='systemCpuLoad', yaxis = "y2") %>%
+  add_trace(x = ~time, y = ~os.processCpuLoad, name='processCpuLoad', yaxis = "y2") %>%
+  add_trace(x = ~time, y = ~heapMemoryUsage.used, name='heapMemoryUsage.used') %>%
+  add_trace(x = ~time, y = ~loadedClasses, name='loadedClasses') %>%
+  add_trace(x = ~time, y = ~nonHeapMemoryUsage.used, name='nonHeapMemoryUsage.used') %>%
+  add_trace(x = ~time, y = ~os.systemLoadAverage, name='os.systemLoadAverage') %>%
+  layout(
+    yaxis2 = ay
+    # xaxis = list(title="tim")
+  )
+```
+
+### Clashes vs ko's
+```{r error=T}
+
+commits <- tryCatch(getMetricsData(experiment, "TransactionManager.Commit", F), error=function(e){cat("ERROR :",conditionMessage(e), "\n"); NULL})
+retries <- tryCatch(getMetricsData(experiment, "2pc.retries", F), error=function(e){cat("ERROR :",conditionMessage(e), "\n"); NULL})
+timeouts <- tryCatch(getMetricsData(experiment, "2pc.timeouts", F), error=function(e){cat("ERROR :",conditionMessage(e), "\n"); NULL})
+
+
+ay <- list(
+  # tickfont = list(color = "red"),
+  overlaying = "y",
+  side = "right",
+  range = c(0,100)
+)
+
+ nodeCpu <- getMetricsData(experiment, "host.cpu", F)[mode == "combined"] %>% group_by(host)
+
+# experiment$kamonTimers
+# experiment$kamonTimers[category == "trace-segment",]
+# nodeCpu <- experiment$kamonTimers[metric=='cpu-idle'] %>% group_by(hostname)
+# nodeCpu$meanCpuSum <- 1-(nodeCpu$mean / 100)
+# nodeCpu
+
+# plot_ly(nodeCpu, x = ~time) %>%
+
+  # add_lines(y=~meanCpuSum)
+
+clashes <- NULL
+try(
+  clashes <- getMetricsData(experiment, "lockClash", F)
+)
+
+p <- plot_ly(type = 'scatter', mode='lines+markers') %>%
+  add_lines(x = gt$allTotal$time, y = gt$allTotal$ko, name='ko') %>%
+  add_lines(x = gt$allTotal$time, y = gt$allTotal$ok, name='ok') %>%
+  add_trace(data=commits %>% group_by(host), x=~time, y=~count, text=~host, symbol=~host, mode='markers', color='2PC-M-Commits') %>%
+  add_lines(data=experiment$db %>% group_by(host), x=~time, y = ~os.processCpuLoad * 100, name='DB-cpu', yaxis = "y2", text=~host) %>%
+  add_lines(data=nodeCpu, x=~time, y=~max, name='node-cpu', yaxis = "y2", text=~host)
+if(!is.null(retries)) {
+  p <- add_trace(p, data=retries %>% group_by(host), x=~time, y = ~count, name='2pc-retries', text=~host, mode='markers', symbol=~host, color='2pc-retries')
+}
+if(!is.null(timeouts)) {
+  p <- add_trace(p, data=timeouts %>% group_by(host), x=~time, y = ~count, text='2pc-timouts', mode='markers', symbol=~host, color='2pc-timeouts')
+}
+if(!is.null(clashes)){
+  p <-  add_trace(p, data=clashes %>% group_by(host), x=~time, y = ~count, text='lockClash', mode='markers', symbol=~host, color='lockClash')
+}
+
+p %>% layout(
+  yaxis2 = ay
+  # xaxis = list(title="time")
+)
+```
+
+### Message throughput
+
+```{r error=T}
+
+messages <- tryCatch(getMetricsData(experiment, "akka.system.processed-messages", F), error=function(e){cat("ERROR :",conditionMessage(e), "\n"); NULL})
+messages <- messages[,list(count = sum(count)), by = list(host, time)]
+plot_ly(messages %>% group_by(host), x=~time, y=~count, type = 'scatter', mode='lines+markers', symbol=~host)
+
+```
+
+
+### Responses per host
+
+Http load is divided equally over all hosts, therefor all hosts should perform similarly.
+
+```{r error=T}
+
+httpCounters <- getMetricsData(experiment, "host.cpu", F)[mode == "combined"] # experiment$kamonCounters[category=="http-server" & metric %like% '-',]
+
+httpCounters %>%
+  plot_ly(mode = 'lines+markers', type='scatter') %>%
+  group_by(host) %>%
+  add_trace(split = ~host, name = ~host, x = ~time, y = ~p99.9, text=~host)
+
+# op <- par(no.readonly = TRUE)
+# for(m in levels(droplevels(httpCounters$metric))) {
+#   # print(m)
+#   data <- httpCounters[metric == m,]
+#   pirateplot(value ~ host , data, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, main=m, xaxt="n")
+#   # print(data)
+#   hostnames <- levels(droplevels(data$host))
+#   # print(hostnames)
+#   axis(1, labels=host, at=1:length(host), las = 2)
+# }
+# 
+# par(op)
+```
+
+### Network metrics per host
+
+```{r error=T}
+m <- list(
+  showMetric("host.network.bytes", "received", 10000, "direction", "count"),
+  showMetric("host.network.bytes", "transmitted", 10000, "direction", "count"),
+  showMetric("host.network.packets", "received", 10000, "direction", "count", "state"),
+  showMetric("host.network.packets", "transmitted", 10000, "direction", "count", "state")
+)
+
+subplot(m, nrows = length(m), shareX = TRUE, titleY = TRUE)
+```
+
+### 2PC per host
+
+```{r error=T}
+m <- list(
+  showMetric("create-TransactionManager", "create-TransactionManager", 10000, "name", "count"),
+  showMetric("create-TransactionParticipant", "create-TransactionParticipant", 10000, "name", "count"),
+  showMetric("akka.system.active-actors", "akka.system.active-actors", 10000, "name", "max")
+)
+
+subplot(m, nrows = length(m), shareX = TRUE, titleY = TRUE)
+```
+
+### Mem per host
+
+```{r error=T}
+m <- list(
+  showMetric("host.memory", "used", 10000, "mode", "p99.0"),
+  showMetric("host.memory", "cached-and-buffered", 10000, "mode", "p99.0")
+)
+
+subplot(m, nrows = length(m), shareX = TRUE, titleY = TRUE)
+```
+
+
+### JVM per host
+
+```{r error=T}
+
+plot_ly(getMetricsData(experiment, "jvm.class-loading", F) %>% group_by(host), x=~time, y=~value, split=~mode, mode = 'lines+markers', type='scatter')
+```
+```{r error=T}
+m <- list(
+  showMetric("jvm.gc", "jvm.gc", 10000, "name", "p99.0"),
+  showMetric("jvm.gc.promotion", "jvm.gc.promotion", 10000, "name", "p99.0", "space"),
+  showMetric("jvm.hiccup", "jvm.hiccup", 10000, "name", "p99.0")
+)
+
+subplot(m, nrows = length(m), shareX = TRUE, titleY = TRUE)
+```
+```{r error=T}
+plot_ly(getMetricsData(experiment, "jvm.memory.buffer-pool.usage", F) %>% group_by(host), x=~time, y=~value, split=~pool, mode = 'lines+markers', type='scatter', text=~host)
+```
+
+#### Threads
+
+```{r error=T}
+plot_ly(getMetricsData(experiment, "jvm.threads", F) %>% group_by(host), x=~time, y=~value, split=~measure, mode = 'lines+markers', type='scatter', text=~host)
+```
+
+### Shard id calls
+
+#### Accounts
+```{r error=T}
+try({
+shards <- getMetricsData(experiment, "shardid-Account", F)
+
+list(
+plot_ly(shards %>% group_by(host), x=~time, y=~count, split=~shardId, mode = 'lines+markers', type='scatter', text=~host),
+
+plot_ly(shards %>% group_by(msgType, shardId), x = ~host, y = ~count, split=~shardId, type = 'bar') %>%
+  # add_trace(y = ~LA_Zoo, name = 'LA Zoo') %>%
+  layout(yaxis = list(title = 'Count'), barmode = 'group')
+)
+})
+
+```
+
+#### 2PC Managers
+```{r error=T}
+try({
+shards <- getMetricsData(experiment, "shardid-2pc", F)
+
+#   all[ok, ok:=i.count, on = c(time="time")]
+# messages <- messages[,list(count = sum(count)), by = list(host, time)]
+
+filtered <- shards[,list(count=sum(count)),by=list(shardId,msgType, host)]
+
+list(
+# plot_ly(shards %>% group_by(host), x=~time, y=~count, split=~shardId, mode = 'lines+markers', type='scatter', text=~msgType),
+
+plot_ly(shards[,list(count=sum(count)),by=list(shardId, host)] , x = ~shardId, y = ~count, split=~host, type = 'bar') %>%
+   layout(title="Total number of messages per shardId, by host"),
+plot_ly(shards[,list(count=sum(count)),by=list(msgType, host, shardId)] , x = ~shardId, y = ~count, split=~host, type = 'bar') %>%
+  layout(yaxis = list(title = 'Count'), barmode = 'stack', title="Total number of messages per shardId, sum per host"),
+plot_ly(shards[,list(count=sum(count)),by=list(shardId,msgType, host)] , x = ~shardId, y = ~count, split=~msgType, type = 'bar') %>%
+  layout(yaxis = list(title = 'Count'), barmode = 'stack', title="Total number of messages per shardId, by msgType"),
+plot_ly(filtered, x =~shardId, y = ~count, split=~msgType, type = 'bar', color = ~host) %>%
+  layout(yaxis = list(title = 'Count'), barmode = 'stack', title="Total number of messages per shardId, by msgType and host")
+)
+})
+
+```
+
+# Mean response time per application host
+
+# ```{r error=T}
+# http <- experiment$kamonTimers[category=='trace' & entity %like% '-'] 
+# 
+# 
+# 
+# # as.duration(http$upper)
+# 
+# http %>%
+#   plot_ly(mode = 'lines+markers', type='scatter') %>%
+#   group_by(hostname) %>%
+#   add_trace(split = ~hostname, name = ~entity, x = ~time, y = ~mean)
+# 
+# #pirateplot(count ~ host , data=experiment$gatling, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0)
+# op <- par(no.readonly = TRUE)
+# pirateplot(mean ~ hostname , http[time >= experiment$performanceStartTime & time <= experiment$performanceEndTime,], quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, xaxt="n")
+# axis(1, labels=levels(http$hostname), at=1:length(levels(http$hostname)), las = 2)
+# par(op)
+# ```
+
+## Total RPS vs OK
+```{r error=T}
+percentOk <- gt$all$ok / gt$all$count
+
+plot_ly(gt$all, x=~count, y=~percentOk, type='scatter', mode="markers",color = ~-percentiles99, colors="RdYlGn") %>%
+  layout(title='RPS vs OK', yaxis = list(title = 'Percentage OK'), xaxis= list(title='RPS'))
+
+plot_ly(gt$all, x=~count, y=~percentOk, type='scatter', mode="markers",color = ~-percentiles99, colors="RdYlGn") %>%
+  layout(title='RPS vs OK', yaxis = list(title = 'Percentage OK'), xaxis= list(title='RPS'))
+
+```
+
+## RPS vs max response time
+```{r error=T}
+# color = ~-percentiles99, colors="RdYlGn",
+plot_ly(gt$all, x=~ok, y=~`percentiles99-9`, type='scatter', mode="markers", name="OK") %>%
+  add_trace(x=~ko, y=~`percentiles99-9`, type='scatter', mode="markers", name="KO")
+
+```
+
+## Compare percentiles
+
+```{r error=T}
+plot_ly(gt$all, type = 'scatter', mode = 'lines', fill = 'tozeroy') %>%
+  # add_trace(y = ~all$count, name = 'all2 count') %>%
+  add_trace(y = ~percentiles50, name = 'p50') %>%
+  add_trace(y = ~percentiles95, name = 'p95') %>%
+  add_trace(y = ~percentiles99, name = 'p99') %>%
+    add_trace(y = ~`percentiles99-9`, name = 'p99.9') %>%
+      # add_trace(y = ~count, name = 'count', yaxis = "y2") %>%
+  layout(yaxis = list(title = 'Percentiles'), xaxis= list(title='Time'))
+```
+
+```{r error=T}
+plot_ly(gt$all, type = 'scatter', mode = 'markers') %>%
+  # add_trace(y = ~all$count, name = 'all2 count') %>%
+  add_trace(x=~ok, y = ~percentiles50, name = 'p50') %>%
+  add_trace(x=~ok, y = ~percentiles95, name = 'p95') %>%
+  add_trace(x=~ok, y = ~percentiles99, name = 'p99') %>%
+    add_trace(x=~ok, y = ~`percentiles99-9`, name = 'p99.9') %>%
+      # add_trace(y = ~count, name = 'count', yaxis = "y2") %>%
+  layout(yaxis = list(title = 'Percentiles'), xaxis= list(title='OK count'))
+```
+
+## Total OKs over time
+```{r error=T}
+
+
+p <- plot_ly(gt$all, x = ~time, y = ~ok)
+
+p
+```
+
+
+## BoxPlot percentiles
+
+# ```{r error=T}
+# 
+# plot_ly(type = 'box', boxpoints = 'all') %>%
+#   add_boxplot(y = gt$all$percentiles95, name="p95") %>%
+#   add_boxplot(y = gt$all$percentiles99, name="p99") %>%
+#   add_boxplot(y = gt$all$`percentiles99-9`, name="p99.9") %>%
+#   add_boxplot(y = gt$all$`percentiles99-99`, name="p99.99")
+# 
+# ```
+
+## Raw Gatling simulation.log
+
+```{r error=TRUE}
+requests <- loadSimulationLogs(resultDir)
+
+oks <- requests[status=="OK",]
+```
+
+```{r error=T}
+
+# plot_ly() %>% 
+plot_ly(requests, mode = 'markers', type='scattergl', opacity=0.2) %>%
+  add_trace(split = ~hostname, x=~end, y=~duration, text=~hostname, name="duration") # %>%
+  # plot_ly(x=~end, y=~duration, mode = 'markers', type='scattergl', name="duration")
+
+# slow loading
+# plot_ly(type = 'box', boxpoints = 'all' ) %>%
+  # add_boxplot(y = requests$duration, name="duration") 
+```
+
+<!-- not nice visualisation
+````{r error=TRUE}
+
+library(beanplot)
+
+beanplot(requests$duration, what=c(1,1,1,0), log="", col = c("#CAB2D6", "#33A02C", "#B2DF8A"), border = "#CAB2D6")
+
+```
+-->
+
+### Latency vs Throughput, already done see RPS vs latency
+
+# ```{r error=TRUE}
+# steps <- getBestStep(experiment)$allSteps
+# 
+# gt$all
+# 
+# p <- plot_ly(mode = 'markers', type='scatter')
+# 
+# for(step in steps) {
+#   p <- add_trace(p, data=step[status=="ok", ], x=~count, y=~`percentiles99-9`, name=~count)
+# }
+# 
+# p
+# ```
+
+````{r error=TRUE}
+
+# pirateplot(duration ~ request , data=oks, point.o = .005, quant = c(.01, .99))
+ggplot(oks, aes(x = request, y = duration)) +
+  geom_pirate(aes(colour = request, fill = request, group=start), points_params = list(alpha = .01), lines_params = list(size = 0.2, alpha = 0.1),
+              violins_params = list(scale = "width"),
+              show.legend = TRUE) +
+  theme(legend.position="bottom") + labs(color='variant') + ggtitle("Latency vs Throughput")
+
+
+
+```
+
+```{r error=TRUE}
+
+# pirateplot(duration ~ request , data=requests, point.o = .005, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, jitter.val=.2, point.cex=0.5)
+
+pirateplot(duration ~ request , data=oks, point.o = .005, quant = c(.01, .99),  avg.line.fun = median, inf.f.o = 0, inf.b.o = 0, jitter.val=.2, point.cex=0.5)
+
+```
+
+```{r error=TRUE}
+# m <- as.matrix(ok$min)
+
+# m <- with(ok, table(time, percentiles99))  
+
+# m
+
+# ay <- list(
+#   # tickfont = list(color = "red"),
+#   overlaying = "y",
+#   side = "right"
+#   # title = "second y axis"
+# )
+
+plot_ly(gt$ok, x=~time, y=~percentiles99, name="ok", type = 'scatter') %>%
+  add_trace(y = ~gt$ko$percentiles99, name = 'ko')
+  # add_trace(y = ~trace_2, name = 'trace 2', mode = 'markers')
+# %>% add_surface()
+```

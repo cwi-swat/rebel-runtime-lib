@@ -1,0 +1,7 @@
+# AWS experiments
+
+run with
+
+- `sbt -Dexperiment=KryoCompression "aws/runMain com.ing.Batch"`
+
+experiment should have an associated `.conf` file in the resources directory

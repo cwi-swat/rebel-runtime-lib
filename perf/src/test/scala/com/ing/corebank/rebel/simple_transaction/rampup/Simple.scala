@@ -1,0 +1,18 @@
+package com.ing.corebank.rebel.simple_transaction.rampup
+
+import com.ing.corebank.rebel.simple_transaction.SimulationBaseRampUp
+
+
+class DummySimulation extends com.ing.corebank.rebel.simple_transaction.simple.DummySimulation with SimulationBaseRampUp
+
+class SimpleSimulation extends com.ing.corebank.rebel.simple_transaction.simple.SimpleSimulation with SimulationBaseRampUp
+
+class SimpleShardingSimulation extends com.ing.corebank.rebel.simple_transaction.simple.SimpleShardingSimulation with SimulationBaseRampUp
+
+class SimpleWithPersistenceSimulation extends com.ing.corebank.rebel.simple_transaction.simple.SimpleWithPersistenceSimulation with SimulationBaseRampUp
+
+class OpenAccountSimulation extends com.ing.corebank.rebel.simple_transaction.simple.OpenAccountSimulation with SimulationBaseRampUp
+
+class AllToAllSimulation extends com.ing.corebank.rebel.simple_transaction.AllToAllSimulation with SimulationBaseRampUp
+
+class AllToOneSimulation extends com.ing.corebank.rebel.simple_transaction.AllToOneSimulation with SimulationBaseRampUp

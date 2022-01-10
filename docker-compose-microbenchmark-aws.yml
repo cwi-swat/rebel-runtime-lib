@@ -1,0 +1,12 @@
+version: '2'
+services:
+  microbenchmark:
+    image: 318043269104.dkr.ecr.eu-central-1.amazonaws.com/generated-microbenchmark:1.0.0-SNAPSHOT
+    mem_limit: 3145728000
+    logging:
+          driver: awslogs
+          options:
+            awslogs-region: eu-central-1
+            awslogs-group: rebel-lib
+            awslogs-stream-prefix: microbenchmark
+    command: "-i 5 -wi 5 -f 1 -t 1 com.ing.rebel.benchmark.*BaselineBenchmark"

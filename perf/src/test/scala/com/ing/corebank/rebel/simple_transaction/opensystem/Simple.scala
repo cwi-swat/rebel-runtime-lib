@@ -1,0 +1,11 @@
+package com.ing.corebank.rebel.simple_transaction.opensystem
+
+import com.ing.corebank.rebel.simple_transaction.SimulationBaseNoRepeat
+
+
+class DummySimulation extends com.ing.corebank.rebel.simple_transaction.simple.DummySimulation with SimulationBaseNoRepeat
+class SimpleSimulation extends com.ing.corebank.rebel.simple_transaction.simple.SimpleSimulation with SimulationBaseNoRepeat
+class SimpleShardingSimulation extends com.ing.corebank.rebel.simple_transaction.simple.SimpleShardingSimulation with SimulationBaseNoRepeat
+class SimpleWithPersistenceSimulation extends com.ing.corebank.rebel.simple_transaction.simple.SimpleWithPersistenceSimulation with SimulationBaseNoRepeat
+class OpenAccountSimulation extends com.ing.corebank.rebel.simple_transaction.simple.OpenAccountSimulation with SimulationBaseNoRepeat
+class AllToAllSimulation extends com.ing.corebank.rebel.simple_transaction.AllToAllSimulation with SimulationBaseNoRepeat

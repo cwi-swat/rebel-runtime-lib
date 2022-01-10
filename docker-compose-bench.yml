@@ -1,0 +1,42 @@
+version: '3'
+services:
+  bench:
+    build:
+      dockerfile: Dockerfile-bench
+      context: .
+    volumes:
+      - ./bench-output:/tmp/bench-output
+    command: "sbt 'bench/jmh:run -prof jmh.extras.JFR:dir=/tmp/bench-output/ -rf csv -rff /tmp/bench-output/benchTP.csv -i 1 -wi 1 -f 1 -r 1 com.ing.rebel.benchmark.vs.loca.tax.*BenchmarkNoOp..*TP12'"
+
+  dep-indep:
+    image: rebel-runtime-lib_bench:latest
+    volumes:
+      - ./bench-output/dep-indep:/tmp/bench-output
+    command: "sbt 'bench/jmh:run -prof jmh.extras.JFR:dir=/tmp/bench-output/ -rf csv -rff /tmp/bench-output/benchTP.csv -i 20 -wi 5 -f 1 com.ing.rebel.benchmark.vs.loca.depositwithdraw.*BenchmarkNoOp..*TP.*'"
+  dep-indep-latency:
+    image: rebel-runtime-lib_bench:latest
+    volumes:
+      - ./bench-output/dep-indep-sample:/tmp/bench-output
+    command: "sbt 'bench/jmh:run -prof jmh.extras.JFR:dir=/tmp/bench-output/ -rf csv -rff /tmp/bench-output/benchSample.csv -i 20 -wi 5 -f 1 com.ing.rebel.benchmark.vs.loca.depositwithdraw.*BenchmarkNoOp..*Sample.*'"
+
+  transaction:
+    image: rebel-runtime-lib_bench:latest
+    volumes:
+      - ./bench-output/transaction:/tmp/bench-output
+    command: "sbt 'bench/jmh:run -prof jmh.extras.JFR:dir=/tmp/bench-output/ -rf csv -rff /tmp/bench-output/benchTP.csv -i 20 -wi 5 -f 1 com.ing.rebel.benchmark.vs.loca.transaction.*BenchmarkNoOp..*TP.*'"
+  transaction-latency:
+    image: rebel-runtime-lib_bench:latest
+    volumes:
+      - ./bench-output/transaction-sample:/tmp/bench-output
+    command: "sbt 'bench/jmh:run -prof jmh.extras.JFR:dir=/tmp/bench-output/ -rf csv -rff /tmp/bench-output/benchSample.csv -i 20 -wi 5 -f 1 com.ing.rebel.benchmark.vs.loca.transaction.*BenchmarkNoOp..*Sample.*'"
+
+  tax:
+    image: rebel-runtime-lib_bench:latest
+    volumes:
+      - ./bench-output/tax:/tmp/bench-output
+    command: "sbt 'bench/jmh:run -prof jmh.extras.JFR:dir=/tmp/bench-output/ -rf csv -rff /tmp/bench-output/benchTP.csv -i 20 -wi 5 -f 1 com.ing.rebel.benchmark.vs.loca.tax.*BenchmarkNoOp..*TP.*'"
+  tax-latency:
+    image: rebel-runtime-lib_bench:latest
+    volumes:
+      - ./bench-output/tax-sample:/tmp/bench-output
+    command: "sbt 'bench/jmh:run -prof jmh.extras.JFR:dir=/tmp/bench-output/ -rf csv -rff /tmp/bench-output/benchSample.csv -i 20 -wi 5 -f 1 com.ing.rebel.benchmark.vs.loca.tax.*BenchmarkNoOp..*Sample.*'"

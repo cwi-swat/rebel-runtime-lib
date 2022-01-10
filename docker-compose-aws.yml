@@ -1,0 +1,105 @@
+version: '2'
+services:
+  db:
+    image: cassandra:2.1
+    mem_limit: 3145728000
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: eu-central-1
+        awslogs-group: rebel-lib
+        awslogs-stream-prefix: db
+  metrics:
+#    build: .
+    image: kamon/grafana_graphite
+    container_name: kamon-grafana-dashboard
+    mem_limit: 536870912
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: eu-central-1
+        awslogs-group: rebel-lib
+        awslogs-stream-prefix: metrics
+    ports:
+      - '80:80'
+#      - '81:81'
+#      - '8125:8125/udp'
+#      - '8126:8126'
+#      - '2003:2003'
+    volumes:
+#      - /tmp/data/whisper:/opt/graphite/storage/whisper
+      - /tmp/data/grafana:/opt/grafana/data
+#      - /tmp/log/graphite:/opt/graphite/storage/log
+
+  seed:
+    image: 318043269104.dkr.ecr.eu-central-1.amazonaws.com/simple-transaction:0.1-GENERATED
+    mem_limit: 3145728000
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: eu-central-1
+        awslogs-group: rebel-lib
+        awslogs-stream-prefix: seed
+    links:
+       - db
+       - metrics
+    ports:
+     - "2551:2551" # Akka Actor System port
+     - "8080:8080" # REST endpoints
+#     - "80:8001" # Visualisation
+    environment:
+     - "CASSANDRA_HOST=db"
+     - "CASSANDRA-2X-COMPAT=on"
+    command:
+      # docker-machine/docker host ip address
+#      - "-Drebel.clustering.ip=172.16.164.131"
+      - "-Drebel.clustering.port=2551"
+      - "-Drebel.sync.type=twophasecommit"
+      - "-Drebel.visualisation.enabled=false"
+      - "-Dkamon.statsd.hostname=metrics"
+      - "-Dakka.loglevel=INFO"
+  performance:
+    image: 318043269104.dkr.ecr.eu-central-1.amazonaws.com/generated-performancetest:1.0.0-SNAPSHOT
+    mem_limit: 1410612736
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: eu-central-1
+        awslogs-group: rebel-lib
+        awslogs-stream-prefix: performance
+    links:
+      - seed
+      - metrics
+    environment:
+      - "REBEL_HOST=seed"
+      - "JAVA_OPTS=-Dgatling.data.writers.0=console -Dgatling.data.writers.1=file -Dgatling.data.writers.2=graphite -Dgatling.data.graphite.host=metrics"
+    volumes:
+      # no user files to improve startup times
+      - /tmp/myemptyfolder:/opt/gatling/user-files/
+      - /gatling/results:/opt/gatling/results
+    command: "-s com.ing.corebank.rebel.simple_transaction.simple.OpenAccountSimulation"
+#  node:
+#    image: 318043269104.dkr.ecr.eu-central-1.amazonaws.com/rebel-lib:1.0.0-SNAPSHOT
+#    mem_limit: 268435456
+#    logging:
+#          driver: awslogs
+#          options:
+#            awslogs-region: eu-central-1
+#            awslogs-group: rebel-lib
+#            awslogs-stream-prefix: node
+#    links:
+#       - db
+#       - seed
+#    ports:
+#     - "2551" # Akka Actor System port
+#     - "8080" # REST endpoints
+#     - "8001" # Visualisation
+#    environment:
+#     - "CASSANDRA_HOST=db"
+#     - "CASSANDRA-2X-COMPAT=on"
+#    command:
+#     // docker-machine/docker host ip address where seed is running
+#     - "-Dakka.cluster.seed-nodes.0=akka://rebel-system@172.16.164.131:2551"
+#     - "-Drebel.sync.type=twophasecommit"
+#      - "-Drebel.visualisation.enabled=false"
+

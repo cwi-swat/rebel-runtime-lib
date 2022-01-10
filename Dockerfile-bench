@@ -1,0 +1,4 @@
+FROM hseeberger/scala-sbt:11.0.3_1.2.8_2.12.9
+ADD . /home/sbtuser/rebel-lib
+WORKDIR /home/sbtuser/rebel-lib
+RUN sbt 'bench/jmh:run -i 1 -wi 0 -f 1 -r 1 com.ing.rebel.benchmark.NoOpPersistenceBaselineBenchmark.maxMessages()'
