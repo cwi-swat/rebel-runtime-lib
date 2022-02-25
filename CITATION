@@ -1,0 +1,69 @@
+@InProceedings{AGERE19-LoCA-SIE,
+  Author	= {Soethout, Tim and van der Storm, Tijs and Vinju, Jurgen J.},
+  Title		= {Static local coordination avoidance for distributed
+		  objects},
+  BookTitle	= {Proceedings of the 9th ACM SIGPLAN International Workshop
+		  on Programming Based on Actors, Agents, and Decentralized
+		  Control - AGERE 2019},
+  Publisher	= {ACM Press},
+  Pages		= {21--30},
+  DOI		= {10.1145/3358499.3361222},
+  Year		= {2019},
+  ISBN		= {9781450369824}
+}
+
+@Article{programming-PSAC,
+  Author	= {Tim Soethout and Tijs van der Storm and Jurgen J. Vinju},
+  Title		= {Path-Sensitive Atomic Commit - Local Coordination
+		  Avoidance for Distributed Transactions},
+  Journal	= {The Art, Science, and Engineering of Programming},
+  Volume	= {5},
+  Number	= {1},
+  Pages		= {3},
+  Year		= {2021},
+  DOI		= {10.22152/programming-journal.org/2021/5/3}
+}
+
+@inproceedings{ASYDE20-CIinTLA,
+  author    = {Tim Soethout and
+               Tijs van der Storm and
+               Jurgen J. Vinju},
+  editor    = {Loek Cleophas and
+               Mieke Massink},
+  title     = {Automated Validation of State-Based Client-Centric Isolation with
+               {{TLA}}\({}^{\mbox{+}}\)},
+  booktitle = {Software Engineering and Formal Methods. {SEFM} 2020 Collocated Workshops
+               - ASYDE, CIFMA, and CoSim-CPS, Amsterdam, The Netherlands, September
+               14-15, 2020, Revised Selected Papers},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {12524},
+  pages     = {43--57},
+  publisher = {Springer},
+  year      = {2020},
+  doi       = {10.1007/978-3-030-67220-1_4},
+  timestamp = {Mon, 25 Jan 2021 17:33:07 +0100},
+}
+
+@inproceedings{splash19doctoralsymposium,
+  author    = {Tim Soethout},
+  editor    = {Yannis Smaragdakis},
+  title     = {Exploiting models for scalable and high throughput distributed software},
+  booktitle = {Proceedings Companion of the 2019 {ACM} {SIGPLAN} International Conference
+               on Systems, Programming, Languages, and Applications: Software for
+               Humanity, {SPLASH} 2019, Athens, Greece, October 20-25, 2019},
+  pages     = {35--37},
+  publisher = {{ACM}},
+  year      = {2019},
+  doi       = {10.1145/3359061.3361073},
+  timestamp = {Mon, 21 Oct 2019 15:22:33 +0200},
+}
+
+@InProceedings{AGERE21-CBC,
+  Author	= {Soethout, Tim and van der Storm, Tijs and Vinju, Jurgen J.},
+  Title		= {Contract-Based Return-Value Commutativity: Safely exploiting contract-based commutativity for faster serializable transactions},
+  BookTitle	= {Proceedings of the 11th ACM SIGPLAN International Workshop
+		  on Programming Based on Actors, Agents, and Decentralized
+		  Control - AGERE 2021},
+  Publisher	= {ACM Press},
+  Year		= {2021}
+}
